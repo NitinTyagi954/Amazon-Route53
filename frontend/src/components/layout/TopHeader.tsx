@@ -2,6 +2,9 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { logoutUser } from "@/lib/api/auth";
+import { clearStoredAuthToken } from "@/lib/auth";
 import {
   Search,
   Bell,
@@ -15,9 +18,17 @@ import {
 } from "lucide-react";
 
 export const TopHeader: React.FC = () => {
+  const router = useRouter();
   const [searchFocused, setSearchFocused] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [regionMenuOpen, setRegionMenuOpen] = useState(false);
+
+  const handleLogout = async () => {
+    setUserMenuOpen(false);
+    await logoutUser();
+    clearStoredAuthToken();
+    router.push("/login");
+  };
 
   return (
     <header className="bg-[#161e2e] text-white h-10 px-3 flex items-center justify-between text-xs select-none sticky top-0 z-50 border-b border-[#0f141c]">
@@ -186,6 +197,14 @@ export const TopHeader: React.FC = () => {
                   </div>
                   <div className="p-1.5 hover:bg-[#263244] rounded-[2px] cursor-pointer">
                     Security credentials
+                  </div>
+                </div>
+                <div className="mt-1 pt-1 border-t border-[#353f4e] text-gray-300 text-xs">
+                  <div
+                    className="p-1.5 hover:bg-[#263244] rounded-[2px] cursor-pointer"
+                    onClick={handleLogout}
+                  >
+                    Sign out
                   </div>
                 </div>
               </div>
