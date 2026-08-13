@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDemoSubmitting, setIsDemoSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // If already authenticated, redirect straight to dashboard
@@ -49,6 +50,24 @@ export default function LoginPage() {
       }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDemoLogin = async () => {
+    setError(null);
+    setIsDemoSubmitting(true);
+    try {
+      const result = await loginUser({ email: "demo@route53.local", password: "Demo@12345" });
+      setStoredAuthToken(result.token, true);
+      router.push("/");
+    } catch (err: any) {
+      if (err instanceof ApiAuthError) {
+        setError(err.message);
+      } else {
+        setError(err?.message || "An unexpected error occurred. Please try again.");
+      }
+    } finally {
+      setIsDemoSubmitting(false);
     }
   };
 
@@ -177,6 +196,22 @@ export default function LoginPage() {
                   {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
                   {isSubmitting ? "Signing in..." : "Sign in"}
                 </button>
+
+                {/* Demo Login */}
+                <div className="mt-4 pt-4 border-t border-[#eaeded]">
+                  <button
+                    type="button"
+                    onClick={handleDemoLogin}
+                    disabled={isSubmitting || isDemoSubmitting}
+                    className="w-full py-2 px-4 text-sm font-semibold rounded-[2px] text-[#16191f]
+                      bg-white border border-[#545b64] hover:bg-[#fafafa] active:bg-[#f2f3f3]
+                      disabled:opacity-60 disabled:cursor-not-allowed
+                      transition-colors flex items-center justify-center gap-2"
+                  >
+                    {isDemoSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {isDemoSubmitting ? "Signing in to demo..." : "Try Demo Account"}
+                  </button>
+                </div>
               </form>
               
               <div className="mt-5 text-center text-[11px] text-[#545b64]">
