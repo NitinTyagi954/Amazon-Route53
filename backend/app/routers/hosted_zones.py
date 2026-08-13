@@ -102,10 +102,11 @@ def create_hosted_zone(
 def get_hosted_zone(
     zone_id: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> HostedZoneResponse:
     """Retrieve a single Hosted Zone by ID."""
     zone = HostedZoneRepository.get_by_id(db, zone_id=zone_id)
-    if not zone:
+    if not zone or zone.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Hosted zone '{zone_id}' not found.",
@@ -118,10 +119,11 @@ def update_hosted_zone(
     zone_id: str,
     zone_in: HostedZoneUpdate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> HostedZoneResponse:
     """Update editable fields of a Hosted Zone by ID."""
     zone = HostedZoneRepository.get_by_id(db, zone_id=zone_id)
-    if not zone:
+    if not zone or zone.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Hosted zone '{zone_id}' not found.",
@@ -143,14 +145,16 @@ def update_hosted_zone(
 def delete_hosted_zone(
     zone_id: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> None:
     """Delete a Hosted Zone and its associated DNS records by ID."""
-    deleted = HostedZoneRepository.delete(db, zone_id=zone_id)
-    if not deleted:
+    zone = HostedZoneRepository.get_by_id(db, zone_id=zone_id)
+    if not zone or zone.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Hosted zone '{zone_id}' not found.",
         )
+    HostedZoneRepository.delete(db, zone_id=zone_id)
     db.commit()
     return None
 

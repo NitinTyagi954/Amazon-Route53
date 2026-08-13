@@ -224,9 +224,51 @@ def test_create_hosted_zone_duplicate_caller_reference(db_session):
         app.dependency_overrides.clear()
 
 
+def test_individual_zone_unauthorized(db_session):
+    """Verify that GET, PUT, and DELETE on individual zone endpoints return 401 without auth."""
+    res1 = client.get("/api/hosted-zones/ZSOMEZONE")
+    assert res1.status_code == 401
+
+    res2 = client.put("/api/hosted-zones/ZSOMEZONE", json={"comment": "new"})
+    assert res2.status_code == 401
+
+    res3 = client.delete("/api/hosted-zones/ZSOMEZONE")
+    assert res3.status_code == 401
+
+
+def test_individual_zone_ownership_isolation(db_session):
+    """Verify that a user cannot access or modify another user's hosted zone (returns 404)."""
+    user_a, headers_a = _create_user_and_token(db_session)
+    user_b, headers_b = _create_user_and_token(db_session)
+
+    zone_b = HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZOWNERISOB",
+        user_id=user_b.id,
+        name="userb.com.",
+        caller_reference="ref-user-b",
+    )
+
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        res_get = client.get(f"/api/hosted-zones/{zone_b.id}", headers=headers_a)
+        assert res_get.status_code == 404
+
+        res_put = client.put(f"/api/hosted-zones/{zone_b.id}", json={"comment": "hijack"}, headers=headers_a)
+        assert res_put.status_code == 404
+
+        res_del = client.delete(f"/api/hosted-zones/{zone_b.id}", headers=headers_a)
+        assert res_del.status_code == 404
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_get_hosted_zone_success(db_session):
     """Test GET /api/hosted-zones/{zone_id} returns existing hosted zone."""
-    user = UserRepository.create(session=db_session, email="getsingle@domain.com", hashed_password="hash")
+    user, headers = _create_user_and_token(db_session)
     zone = HostedZoneRepository.create(
         session=db_session,
         zone_id="ZSINGLEZONE001",
@@ -242,7 +284,7 @@ def test_get_hosted_zone_success(db_session):
 
     app.dependency_overrides[get_db] = _get_db_override
     try:
-        response = client.get(f"/api/hosted-zones/{zone.id}")
+        response = client.get(f"/api/hosted-zones/{zone.id}", headers=headers)
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == "ZSINGLEZONE001"
@@ -258,12 +300,14 @@ def test_get_hosted_zone_success(db_session):
 
 def test_get_hosted_zone_not_found(db_session):
     """Test GET /api/hosted-zones/{zone_id} returns 404 when zone does not exist."""
+    user, headers = _create_user_and_token(db_session)
+
     def _get_db_override():
         yield db_session
 
     app.dependency_overrides[get_db] = _get_db_override
     try:
-        response = client.get("/api/hosted-zones/ZNONEXISTENTZONE")
+        response = client.get("/api/hosted-zones/ZNONEXISTENTZONE", headers=headers)
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
     finally:
@@ -272,7 +316,7 @@ def test_get_hosted_zone_not_found(db_session):
 
 def test_update_hosted_zone_success(db_session):
     """Test PUT /api/hosted-zones/{zone_id} updates editable fields and returns HTTP 200."""
-    user = UserRepository.create(session=db_session, email="updater@domain.com", hashed_password="hash")
+    user, headers = _create_user_and_token(db_session)
     zone = HostedZoneRepository.create(
         session=db_session,
         zone_id="ZUPDATEZONE001",
@@ -293,7 +337,7 @@ def test_update_hosted_zone_success(db_session):
             "comment": "Updated comment text",
             "is_private": True,
         }
-        response = client.put(f"/api/hosted-zones/{zone.id}", json=payload)
+        response = client.put(f"/api/hosted-zones/{zone.id}", json=payload, headers=headers)
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == "ZUPDATEZONE001"
@@ -310,12 +354,14 @@ def test_update_hosted_zone_success(db_session):
 
 def test_update_hosted_zone_not_found(db_session):
     """Test PUT /api/hosted-zones/{zone_id} returns 404 when updating non-existent zone."""
+    user, headers = _create_user_and_token(db_session)
+
     def _get_db_override():
         yield db_session
 
     app.dependency_overrides[get_db] = _get_db_override
     try:
-        response = client.put("/api/hosted-zones/ZNONEXISTENTZONE", json={"comment": "No zone here"})
+        response = client.put("/api/hosted-zones/ZNONEXISTENTZONE", json={"comment": "No zone here"}, headers=headers)
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
     finally:
@@ -324,7 +370,7 @@ def test_update_hosted_zone_not_found(db_session):
 
 def test_update_hosted_zone_invalid_domain(db_session):
     """Test PUT /api/hosted-zones/{zone_id} returns 422 on invalid domain update."""
-    user = UserRepository.create(session=db_session, email="invalidupd@domain.com", hashed_password="hash")
+    user, headers = _create_user_and_token(db_session)
     zone = HostedZoneRepository.create(
         session=db_session,
         zone_id="ZUPDVAL001",
@@ -338,7 +384,7 @@ def test_update_hosted_zone_invalid_domain(db_session):
 
     app.dependency_overrides[get_db] = _get_db_override
     try:
-        response = client.put(f"/api/hosted-zones/{zone.id}", json={"name": "-invalidstart.com"})
+        response = client.put(f"/api/hosted-zones/{zone.id}", json={"name": "-invalidstart.com"}, headers=headers)
         assert response.status_code == 422
     finally:
         app.dependency_overrides.clear()
@@ -346,7 +392,7 @@ def test_update_hosted_zone_invalid_domain(db_session):
 
 def test_delete_hosted_zone_success(db_session):
     """Test DELETE /api/hosted-zones/{zone_id} deletes hosted zone and returns HTTP 204."""
-    user = UserRepository.create(session=db_session, email="deleter@domain.com", hashed_password="hash")
+    user, headers = _create_user_and_token(db_session)
     zone = HostedZoneRepository.create(
         session=db_session,
         zone_id="ZDELETEZONE001",
@@ -360,12 +406,12 @@ def test_delete_hosted_zone_success(db_session):
 
     app.dependency_overrides[get_db] = _get_db_override
     try:
-        response = client.delete(f"/api/hosted-zones/{zone.id}")
+        response = client.delete(f"/api/hosted-zones/{zone.id}", headers=headers)
         assert response.status_code == 204
         assert response.content == b""
 
         # Verify zone is gone
-        get_res = client.get(f"/api/hosted-zones/{zone.id}")
+        get_res = client.get(f"/api/hosted-zones/{zone.id}", headers=headers)
         assert get_res.status_code == 404
     finally:
         app.dependency_overrides.clear()
@@ -373,7 +419,7 @@ def test_delete_hosted_zone_success(db_session):
 
 def test_delete_hosted_zone_cascade_records(db_session):
     """Test DELETE /api/hosted-zones/{zone_id} cascades deletion to associated DNS records."""
-    user = UserRepository.create(session=db_session, email="cascade@domain.com", hashed_password="hash")
+    user, headers = _create_user_and_token(db_session)
     zone = HostedZoneRepository.create(
         session=db_session,
         zone_id="ZDELCASCADE001",
@@ -397,7 +443,7 @@ def test_delete_hosted_zone_cascade_records(db_session):
 
     app.dependency_overrides[get_db] = _get_db_override
     try:
-        response = client.delete(f"/api/hosted-zones/{zone.id}")
+        response = client.delete(f"/api/hosted-zones/{zone.id}", headers=headers)
         assert response.status_code == 204
 
         # Verify DNS record was cascade-deleted
@@ -408,12 +454,14 @@ def test_delete_hosted_zone_cascade_records(db_session):
 
 def test_delete_hosted_zone_not_found(db_session):
     """Test DELETE /api/hosted-zones/{zone_id} returns 404 for non-existent zone."""
+    user, headers = _create_user_and_token(db_session)
+
     def _get_db_override():
         yield db_session
 
     app.dependency_overrides[get_db] = _get_db_override
     try:
-        response = client.delete("/api/hosted-zones/ZNONEXISTENTZONE")
+        response = client.delete("/api/hosted-zones/ZNONEXISTENTZONE", headers=headers)
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
     finally:
