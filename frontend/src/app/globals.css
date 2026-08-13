@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --aws-top-nav-bg: #161e2e;
+    --aws-top-nav-search: #0f141c;
+    --aws-top-nav-border: #353f4e;
+    --aws-top-nav-text: #ffffff;
+    --aws-top-nav-hover: #263244;
+    
+    --aws-bg: #f2f3f3;
+    --aws-card-bg: #ffffff;
+    --aws-border: #eaeded;
+    --aws-border-dark: #d5dbdb;
+    
+    --aws-text-primary: #16191f;
+    --aws-text-secondary: #545b64;
+    --aws-text-muted: #879596;
+    
+    --aws-orange: #ec7211;
+    --aws-orange-hover: #eb5f07;
+    --aws-orange-active: #dd5b00;
+    
+    --aws-blue: #0972d3;
+    --aws-blue-hover: #033160;
+    --aws-blue-light: #ebf3fb;
+    
+    --aws-green: #1d8102;
+  }
+
+  body {
+    background-color: var(--aws-bg);
+    color: var(--aws-text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+}
+
+/* AWS Console Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
