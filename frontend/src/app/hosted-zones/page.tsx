@@ -7,16 +7,15 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
-  ExternalLink,
   Plus,
   Trash2,
   Edit2,
   Eye,
-  SlidersHorizontal,
   X,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
+import { CreateHostedZoneModal } from "@/components/hosted-zones/CreateHostedZoneModal";
 
 interface HostedZoneMock {
   id: string;
@@ -60,8 +59,9 @@ export default function HostedZonesPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize] = useState(10);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   // Filtered zones based on search query
   const filteredZones = useMemo(() => {
@@ -117,6 +117,24 @@ export default function HostedZonesPage() {
     setSelectedIds([]);
   };
 
+  const handleCreateZoneMock = (newZone: {
+    name: string;
+    description: string;
+    type: "Public" | "Private";
+  }) => {
+    const randomId =
+      "Z" + Math.random().toString(36).substring(2, 10).toUpperCase();
+    const createdZone: HostedZoneMock = {
+      id: randomId,
+      name: newZone.name,
+      type: newZone.type,
+      createdBy: "Route 53",
+      recordCount: 2, // Default SOA + NS records
+      description: newZone.description,
+    };
+    setHostedZones((prev) => [createdZone, ...prev]);
+  };
+
   return (
     <div className="space-y-4">
       {/* 1. Page Header & Top Controls */}
@@ -169,6 +187,7 @@ export default function HostedZonesPage() {
           <Button
             variant="primary"
             size="md"
+            onClick={() => setIsCreateModalOpen(true)}
             icon={<Plus className="w-4 h-4" />}
           >
             Create hosted zone
@@ -178,7 +197,7 @@ export default function HostedZonesPage() {
 
       {/* 2. AWS Table Container */}
       <div className="bg-white border border-[#eaeded] rounded-[2px] shadow-sm overflow-hidden">
-        {/* Table Top Bar: Filter & Preferences */}
+        {/* Table Top Bar: Filter */}
         <div className="p-3 border-b border-[#eaeded] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white">
           <div className="flex-1 max-w-md relative">
             <div className="flex items-center bg-white border border-[#545b64] rounded-[2px] px-2.5 py-1 text-xs text-[#16191f] focus-within:ring-1 focus-within:ring-[#0972d3] focus-within:border-[#0972d3]">
@@ -317,6 +336,7 @@ export default function HostedZonesPage() {
             <Button
               variant="primary"
               size="sm"
+              onClick={() => setIsCreateModalOpen(true)}
               icon={<Plus className="w-3.5 h-3.5" />}
             >
               Create hosted zone
@@ -361,6 +381,13 @@ export default function HostedZonesPage() {
           </div>
         )}
       </div>
+
+      {/* 4. Create Hosted Zone Modal */}
+      <CreateHostedZoneModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSubmit={handleCreateZoneMock}
+      />
     </div>
   );
 }
