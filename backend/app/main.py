@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.dependencies import get_db
-from app.routers.hosted_zones import router as hosted_zones_router
+from app.routers import hosted_zones_router, dns_records_router
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -15,6 +15,8 @@ app = FastAPI(
 )
 
 app.include_router(hosted_zones_router)
+app.include_router(dns_records_router)
+
 
 
 @app.get("/health", tags=["Health"])
