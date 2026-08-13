@@ -632,6 +632,124 @@ def test_list_hosted_zone_records_not_found(db_session):
         app.dependency_overrides.clear()
 
 
+def test_create_hosted_zone_record_success(db_session):
+    """Test POST /api/hosted-zones/{zone_id}/records creates a record and updates record_count."""
+    user = UserRepository.create(session=db_session, email="addrec@domain.com", hashed_password="hash")
+    zone = HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZCREATEREC001",
+        user_id=user.id,
+        name="mytestdomain.com.",
+        caller_reference="ref-addrec-001",
+    )
+    assert zone.record_count == 0
+
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        payload = {
+            "name": "api.mytestdomain.com",
+            "type": "A",
+            "value": "192.0.2.42",
+            "ttl": 600,
+        }
+        res = client.post(f"/api/hosted-zones/{zone.id}/records", json=payload)
+        assert res.status_code == 201
+        data = res.json()
+        assert data["id"] is not None
+        assert data["hosted_zone_id"] == zone.id
+        assert data["name"] == "api.mytestdomain.com."
+        assert data["type"] == "A"
+        assert data["value"] == "192.0.2.42"
+        assert data["ttl"] == 600
+        assert data["is_system_record"] is False
+
+        # Verify updated record count in DB
+        updated_zone = HostedZoneRepository.get_by_id(db_session, zone.id)
+        assert updated_zone.record_count == 1
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_create_hosted_zone_record_zone_not_found(db_session):
+    """Test POST /api/hosted-zones/{zone_id}/records returns 404 when zone does not exist."""
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        payload = {
+            "name": "sub.missingzone.com",
+            "type": "A",
+            "value": "1.1.1.1",
+            "ttl": 300,
+        }
+        res = client.post("/api/hosted-zones/ZNONEXISTENTZONE/records", json=payload)
+        assert res.status_code == 404
+        assert "not found" in res.json()["detail"].lower()
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_create_hosted_zone_record_invalid_type(db_session):
+    """Test POST /api/hosted-zones/{zone_id}/records returns 422 for unsupported record type."""
+    user = UserRepository.create(session=db_session, email="invtype@domain.com", hashed_password="hash")
+    zone = HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZINVTYPE001",
+        user_id=user.id,
+        name="invtypedomain.com.",
+        caller_reference="ref-invtype-001",
+    )
+
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        payload = {
+            "name": "sub.invtypedomain.com",
+            "type": "INVALID_DNS_TYPE",
+            "value": "1.1.1.1",
+            "ttl": 300,
+        }
+        res = client.post(f"/api/hosted-zones/{zone.id}/records", json=payload)
+        assert res.status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_create_hosted_zone_record_invalid_ttl(db_session):
+    """Test POST /api/hosted-zones/{zone_id}/records returns 422 for negative TTL."""
+    user = UserRepository.create(session=db_session, email="invttl@domain.com", hashed_password="hash")
+    zone = HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZINVTTL001",
+        user_id=user.id,
+        name="invttldomain.com.",
+        caller_reference="ref-invttl-001",
+    )
+
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        payload = {
+            "name": "sub.invttldomain.com",
+            "type": "A",
+            "value": "1.1.1.1",
+            "ttl": -50,
+        }
+        res = client.post(f"/api/hosted-zones/{zone.id}/records", json=payload)
+        assert res.status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+
+
+
 
 
 

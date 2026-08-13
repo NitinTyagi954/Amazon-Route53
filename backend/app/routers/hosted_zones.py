@@ -19,7 +19,8 @@ from app.schemas.hosted_zone import (
     HostedZoneResponse,
     PaginatedHostedZoneResponse,
 )
-from app.schemas.dns_record import DNSRecordResponse
+from app.schemas.dns_record import DNSRecordCreate, DNSRecordResponse
+
 
 
 router = APIRouter(prefix="/api/hosted-zones", tags=["Hosted Zones"])
@@ -187,6 +188,42 @@ def list_hosted_zone_records(
             detail=f"Hosted zone '{zone_id}' not found.",
         )
     return DNSRecordRepository.list_by_zone(db, hosted_zone_id=zone_id)
+
+
+@router.post("/{zone_id}/records", response_model=DNSRecordResponse, status_code=status.HTTP_201_CREATED)
+def create_hosted_zone_record(
+    zone_id: str,
+    record_in: DNSRecordCreate,
+    db: Session = Depends(get_db),
+) -> DNSRecordResponse:
+    """Create a new DNS record inside an existing Hosted Zone."""
+    zone = HostedZoneRepository.get_by_id(db, zone_id=zone_id)
+    if not zone:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Hosted zone '{zone_id}' not found.",
+        )
+
+    try:
+        record = DNSRecordRepository.create(
+            session=db,
+            hosted_zone_id=zone_id,
+            name=record_in.name,
+            type=record_in.type,
+            value=record_in.value,
+            ttl=record_in.ttl,
+            is_system_record=record_in.is_system_record,
+        )
+        db.commit()
+        db.refresh(record)
+        return record
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+
 
 
 

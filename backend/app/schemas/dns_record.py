@@ -24,8 +24,9 @@ class DNSRecordBase(BaseModel):
 
 
 class DNSRecordCreate(DNSRecordBase):
-    hosted_zone_id: str
+    hosted_zone_id: str | None = None
     is_system_record: bool = False
+
 
 
 class DNSRecordResponse(DNSRecordBase):
