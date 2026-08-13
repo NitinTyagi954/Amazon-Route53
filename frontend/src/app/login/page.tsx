@@ -57,7 +57,7 @@ export default function LoginPage() {
     setError(null);
     setIsDemoSubmitting(true);
     try {
-      const result = await loginUser({ email: "demo@route53.local", password: "Demo@12345" });
+      const result = await loginUser({ email: "demo@route53.example.com", password: "Demo@12345" });
       setStoredAuthToken(result.token, true);
       router.push("/");
     } catch (err: any) {

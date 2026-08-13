@@ -5,14 +5,14 @@ from pydantic import BaseModel, EmailStr, ConfigDict, Field
 
 
 class UserCreate(BaseModel):
-    email: EmailStr
+    email: str
     password: str = Field(..., min_length=6)
     full_name: str | None = None
 
 
 class UserResponse(BaseModel):
     id: str
-    email: EmailStr
+    email: str
     full_name: str | None
     is_active: bool
     created_at: datetime
@@ -27,7 +27,7 @@ class TokenResponse(BaseModel):
 
 class LoginRequest(BaseModel):
     """Request body for POST /api/auth/login."""
-    email: EmailStr
+    email: str
     password: str = Field(..., min_length=1)
 
 
@@ -39,7 +39,7 @@ class LoginResponse(BaseModel):
 
 class RegisterRequest(BaseModel):
     """Request body for POST /api/auth/register."""
-    email: EmailStr
+    email: str
     password: str = Field(..., min_length=8, description="Minimum 8 characters")
     full_name: str | None = None
 
@@ -47,7 +47,7 @@ class RegisterRequest(BaseModel):
 class RegisterResponse(BaseModel):
     """Response body returned on successful registration."""
     id: str
-    email: EmailStr
+    email: str
     full_name: str | None
     is_active: bool
     created_at: datetime
