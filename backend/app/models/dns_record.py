@@ -11,6 +11,9 @@ if TYPE_CHECKING:
     from backend.app.models.hosted_zone import HostedZone
 
 
+VALID_RECORD_TYPES = {"A", "AAAA", "CNAME", "TXT", "MX", "NS", "PTR", "SRV", "CAA", "SOA"}
+
+
 class DNSRecord(Base):
     """DNS Resource Record Set entity inside a Hosted Zone."""
 
@@ -39,7 +42,7 @@ class DNSRecord(Base):
         String(10),
         nullable=False,
         index=True,
-        comment="DNS Record Type (A, AAAA, CNAME, MX, TXT, NS, SOA)",
+        comment="DNS Record Type (A, AAAA, CNAME, TXT, MX, NS, PTR, SRV, CAA, SOA)",
     )
     ttl: Mapped[int] = mapped_column(
         Integer,

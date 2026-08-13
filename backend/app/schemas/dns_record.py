@@ -1,14 +1,26 @@
-"""Pydantic Schemas for DNS Records."""
-
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from backend.app.models.dns_record import VALID_RECORD_TYPES
+
+RecordTypeLiteral = Literal["A", "AAAA", "CNAME", "TXT", "MX", "NS", "PTR", "SRV", "CAA", "SOA"]
 
 
 class DNSRecordBase(BaseModel):
-    name: str = Field(..., example="api.example.com.")
-    type: str = Field(..., example="A")
+    name: str = Field(..., json_schema_extra={"example": "api.example.com."})
+    type: str = Field(..., json_schema_extra={"example": "A"})
     ttl: int = Field(default=300, ge=0)
-    value: str = Field(..., example="192.0.2.1")
+    value: str = Field(..., json_schema_extra={"example": "192.0.2.1"})
+
+    @field_validator("type")
+    @classmethod
+    def validate_type(cls, v: str) -> str:
+        upper_v = v.upper()
+        if upper_v not in VALID_RECORD_TYPES:
+            allowed = ", ".join(sorted(VALID_RECORD_TYPES))
+            raise ValueError(f"Invalid DNS record type '{v}'. Allowed types are: {allowed}")
+        return upper_v
 
 
 class DNSRecordCreate(DNSRecordBase):
@@ -24,3 +36,4 @@ class DNSRecordResponse(DNSRecordBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+

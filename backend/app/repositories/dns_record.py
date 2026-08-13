@@ -4,7 +4,7 @@ from typing import List, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.models.dns_record import DNSRecord
+from backend.app.models.dns_record import DNSRecord, VALID_RECORD_TYPES
 from backend.app.models.hosted_zone import HostedZone
 
 
@@ -21,10 +21,15 @@ class DNSRecordRepository:
         ttl: int = 300,
         is_system_record: bool = False,
     ) -> DNSRecord:
+        upper_type = type.upper()
+        if upper_type not in VALID_RECORD_TYPES:
+            allowed = ", ".join(sorted(VALID_RECORD_TYPES))
+            raise ValueError(f"Invalid DNS record type '{type}'. Allowed types are: {allowed}")
+
         record = DNSRecord(
             hosted_zone_id=hosted_zone_id,
             name=name if name.endswith(".") else f"{name}.",
-            type=type.upper(),
+            type=upper_type,
             value=value,
             ttl=ttl,
             is_system_record=is_system_record,

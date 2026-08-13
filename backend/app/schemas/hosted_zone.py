@@ -5,13 +5,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class HostedZoneBase(BaseModel):
-    name: str = Field(..., example="example.com.")
-    comment: str | None = Field(default=None, example="Primary zone")
+    name: str = Field(..., json_schema_extra={"example": "example.com."})
+    comment: str | None = Field(default=None, json_schema_extra={"example": "Primary zone"})
     is_private: bool = Field(default=False)
 
 
 class HostedZoneCreate(HostedZoneBase):
-    caller_reference: str = Field(..., example="ref-20260813-001")
+    caller_reference: str = Field(..., json_schema_extra={"example": "ref-20260813-001"})
 
 
 class HostedZoneResponse(HostedZoneBase):

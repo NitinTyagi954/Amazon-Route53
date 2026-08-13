@@ -125,3 +125,79 @@ def test_cascade_delete_hosted_zone(db_session):
     HostedZoneRepository.delete(db_session, zone.id)
     assert HostedZoneRepository.get_by_id(db_session, zone.id) is None
     assert len(DNSRecordRepository.list_by_zone(db_session, zone.id)) == 0
+
+
+def test_all_route53_record_types(db_session):
+    """Test creation and validation of all 10 required Route 53 record types."""
+    user = UserRepository.create(session=db_session, email="types@domain.com", hashed_password="hash")
+    zone = HostedZoneRepository.create(
+        session=db_session,
+        zone_id="Z10TYPES",
+        user_id=user.id,
+        name="alltypes.com.",
+        caller_reference="ref-types-001",
+    )
+
+    test_records = [
+        ("A", "192.0.2.1"),
+        ("AAAA", "2001:db8::1"),
+        ("CNAME", "target.alltypes.com."),
+        ("TXT", '"v=spf1 include:_spf.example.com ~all"'),
+        ("MX", "10 mail.alltypes.com."),
+        ("NS", "ns1.route53.dns."),
+        ("PTR", "1.2.0.192.in-addr.arpa."),
+        ("SRV", "10 60 5060 sip.alltypes.com."),
+        ("CAA", '0 issue "letsencrypt.org"'),
+        ("SOA", "ns1.route53.dns. hostmaster.alltypes.com. 1 7200 900 1209600 86400"),
+    ]
+
+    for record_type, value in test_records:
+        rec = DNSRecordRepository.create(
+            session=db_session,
+            hosted_zone_id=zone.id,
+            name=f"test-{record_type.lower()}.alltypes.com.",
+            type=record_type,
+            value=value,
+            ttl=300,
+        )
+        assert rec.id is not None
+        assert rec.type == record_type
+        assert rec.value == value
+
+    records_in_db = DNSRecordRepository.list_by_zone(db_session, zone.id)
+    assert len(records_in_db) == len(test_records)
+    created_types = {r.type for r in records_in_db}
+    assert created_types == {"A", "AAAA", "CNAME", "TXT", "MX", "NS", "PTR", "SRV", "CAA", "SOA"}
+
+
+def test_invalid_record_type_validation(db_session):
+    """Test that invalid record types raise a ValueError in both repository and schema."""
+    user = UserRepository.create(session=db_session, email="invalid@domain.com", hashed_password="hash")
+    zone = HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZINVALID",
+        user_id=user.id,
+        name="invalidtype.com.",
+        caller_reference="ref-inv-001",
+    )
+
+    # Repository validation
+    with pytest.raises(ValueError, match="Invalid DNS record type 'BOGUS'"):
+        DNSRecordRepository.create(
+            session=db_session,
+            hosted_zone_id=zone.id,
+            name="bogus.invalidtype.com.",
+            type="BOGUS",
+            value="1.2.3.4",
+        )
+
+    # Pydantic schema validation
+    from backend.app.schemas.dns_record import DNSRecordCreate
+    with pytest.raises(ValueError, match="Invalid DNS record type 'INVALID_TYPE'"):
+        DNSRecordCreate(
+            hosted_zone_id=zone.id,
+            name="sub.invalidtype.com.",
+            type="INVALID_TYPE",
+            value="1.2.3.4",
+        )
+
