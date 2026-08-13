@@ -1,7 +1,11 @@
 """AWS Route 53 Clone - FastAPI Application Entry Point."""
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
 from app.core.config import settings
+from app.dependencies import get_db
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -13,6 +17,13 @@ app = FastAPI(
 @app.get("/health", tags=["Health"])
 def health_check() -> dict:
     """Health check endpoint returning backend status."""
+    return {"status": "ok"}
+
+
+@app.get("/health/db", tags=["Health"])
+def health_db_check(db: Session = Depends(get_db)) -> dict:
+    """Database connectivity health check endpoint."""
+    db.execute(text("SELECT 1"))
     return {"status": "ok"}
 
 
