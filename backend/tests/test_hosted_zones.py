@@ -749,6 +749,100 @@ def test_create_hosted_zone_record_invalid_ttl(db_session):
         app.dependency_overrides.clear()
 
 
+def test_list_hosted_zone_records_search(db_session):
+    """Test GET /api/hosted-zones/{zone_id}/records search by name, value, case-insensitivity, no match, and cross-zone isolation."""
+    user = UserRepository.create(session=db_session, email="recsearch@domain.com", hashed_password="hash")
+    zone1 = HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZRECSRCH001",
+        user_id=user.id,
+        name="targetzone.com.",
+        caller_reference="ref-rec-s001",
+    )
+    zone2 = HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZRECSRCH002",
+        user_id=user.id,
+        name="otherzone.com.",
+        caller_reference="ref-rec-s002",
+    )
+
+    # Records in Zone 1
+    DNSRecordRepository.create(
+        session=db_session,
+        hosted_zone_id=zone1.id,
+        name="api.targetzone.com.",
+        type="A",
+        value="10.0.0.10",
+    )
+    DNSRecordRepository.create(
+        session=db_session,
+        hosted_zone_id=zone1.id,
+        name="web.targetzone.com.",
+        type="TXT",
+        value="v=spf1 include:mailserver.com",
+    )
+    DNSRecordRepository.create(
+        session=db_session,
+        hosted_zone_id=zone1.id,
+        name="db.targetzone.com.",
+        type="CNAME",
+        value="postgres.internal.net",
+    )
+
+    # Record in Zone 2 matching "api" (must NOT be returned when querying Zone 1)
+    DNSRecordRepository.create(
+        session=db_session,
+        hosted_zone_id=zone2.id,
+        name="api.otherzone.com.",
+        type="A",
+        value="10.0.0.99",
+    )
+
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        # Name matching
+        res_name = client.get(f"/api/hosted-zones/{zone1.id}/records?search=api")
+        assert res_name.status_code == 200
+        data_name = res_name.json()
+        assert len(data_name) == 1
+        assert data_name[0]["name"] == "api.targetzone.com."
+        assert data_name[0]["hosted_zone_id"] == zone1.id
+
+        # Value matching
+        res_val = client.get(f"/api/hosted-zones/{zone1.id}/records?search=mailserver")
+        assert res_val.status_code == 200
+        data_val = res_val.json()
+        assert len(data_val) == 1
+        assert data_val[0]["name"] == "web.targetzone.com."
+
+        # Case-insensitive matching
+        res_case = client.get(f"/api/hosted-zones/{zone1.id}/records?search=POSTGRES")
+        assert res_case.status_code == 200
+        data_case = res_case.json()
+        assert len(data_case) == 1
+        assert data_case[0]["name"] == "db.targetzone.com."
+
+        # No match results
+        res_nomatch = client.get(f"/api/hosted-zones/{zone1.id}/records?search=nonexistent")
+        assert res_nomatch.status_code == 200
+        assert res_nomatch.json() == []
+
+        # Cross-zone isolation: record from zone2 with "10.0.0" search must only return zone1's record
+        res_iso = client.get(f"/api/hosted-zones/{zone1.id}/records?search=10.0.0")
+        assert res_iso.status_code == 200
+        data_iso = res_iso.json()
+        assert len(data_iso) == 1
+        assert data_iso[0]["hosted_zone_id"] == zone1.id
+        assert data_iso[0]["value"] == "10.0.0.10"
+    finally:
+        app.dependency_overrides.clear()
+
+
+
 
 
 

@@ -178,16 +178,18 @@ def delete_hosted_zone(
 @router.get("/{zone_id}/records", response_model=List[DNSRecordResponse])
 def list_hosted_zone_records(
     zone_id: str,
+    search: Optional[str] = Query(None, description="Optional case-insensitive search by record name or value"),
     db: Session = Depends(get_db),
 ) -> List[DNSRecordResponse]:
-    """List DNS records belonging to a specific Hosted Zone."""
+    """List DNS records belonging to a specific Hosted Zone, with optional search query on name or value."""
     zone = HostedZoneRepository.get_by_id(db, zone_id=zone_id)
     if not zone:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Hosted zone '{zone_id}' not found.",
         )
-    return DNSRecordRepository.list_by_zone(db, hosted_zone_id=zone_id)
+    return DNSRecordRepository.list_by_zone(db, hosted_zone_id=zone_id, search=search)
+
 
 
 @router.post("/{zone_id}/records", response_model=DNSRecordResponse, status_code=status.HTTP_201_CREATED)

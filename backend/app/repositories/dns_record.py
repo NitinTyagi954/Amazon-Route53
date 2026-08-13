@@ -1,7 +1,5 @@
-"""DNS Record Repository Data Access Layer."""
-
 from typing import List, Optional
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.orm import Session
 
 from app.models.dns_record import DNSRecord, VALID_RECORD_TYPES
@@ -49,9 +47,13 @@ class DNSRecordRepository:
         return session.get(DNSRecord, record_id)
 
     @staticmethod
-    def list_by_zone(session: Session, hosted_zone_id: str) -> List[DNSRecord]:
+    def list_by_zone(session: Session, hosted_zone_id: str, search: Optional[str] = None) -> List[DNSRecord]:
         stmt = select(DNSRecord).where(DNSRecord.hosted_zone_id == hosted_zone_id)
+        if search and search.strip():
+            term = f"%{search.strip()}%"
+            stmt = stmt.where(or_(DNSRecord.name.ilike(term), DNSRecord.value.ilike(term)))
         return list(session.scalars(stmt).all())
+
 
     @staticmethod
     def update(
