@@ -149,20 +149,46 @@ export async function getHostedZones(
     queryParams.set("search", search.trim());
   }
 
-  const response = await fetch(
-    `${API_BASE_URL}/api/hosted-zones?${queryParams.toString()}`,
-    {
-      method: "GET",
-      headers,
-    }
-  );
+  let response: Response;
+  try {
+    response = await fetch(
+      `${API_BASE_URL}/api/hosted-zones?${queryParams.toString()}`,
+      {
+        method: "GET",
+        headers,
+      }
+    );
+  } catch (err: any) {
+    throw new ApiError(
+      "Unable to connect to the server. Please check that the backend is running.",
+      0,
+      err?.message
+    );
+  }
 
   if (!response.ok) {
-    let errorDetail = response.statusText;
+    let errorDetail = "";
     try {
       const errorJson = await response.json();
-      errorDetail = errorJson.detail || errorDetail;
-    } catch {}
+      if (typeof errorJson.detail === "string") {
+        errorDetail = errorJson.detail;
+      } else if (Array.isArray(errorJson.detail)) {
+        errorDetail = errorJson.detail.map((e: any) => e.msg || e.message).join(", ");
+      } else {
+        errorDetail = JSON.stringify(errorJson);
+      }
+    } catch {
+      errorDetail = response.statusText;
+    }
+
+    if (response.status === 401) {
+      throw new ApiError(
+        errorDetail || "Authentication failed: Missing or invalid session token.",
+        401,
+        errorDetail
+      );
+    }
+
     throw new ApiError(
       errorDetail || `Failed to fetch hosted zones (${response.status})`,
       response.status,

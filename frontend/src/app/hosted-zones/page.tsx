@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   RotateCw,
@@ -12,114 +12,107 @@ import {
   Edit2,
   Eye,
   X,
+  Loader2,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { CreateHostedZoneModal } from "@/components/hosted-zones/CreateHostedZoneModal";
-import { HostedZoneItem, getHostedZones } from "@/lib/api/hostedZones";
-
-interface HostedZoneView {
-  id: string;
-  name: string;
-  type: "Public" | "Private";
-  createdBy: string;
-  recordCount: number;
-  description: string;
-  comment?: string | null;
-}
-
-const INITIAL_MOCK_DATA: HostedZoneView[] = [
-  {
-    id: "Z0123456789ABC",
-    name: "example.com.",
-    type: "Public",
-    createdBy: "Route 53",
-    recordCount: 4,
-    description: "Production web application domain",
-  },
-  {
-    id: "Z0987654321DEF",
-    name: "api.internal.",
-    type: "Private",
-    createdBy: "Route 53",
-    recordCount: 2,
-    description: "Internal VPC private DNS zone",
-  },
-  {
-    id: "Z0112233445GHI",
-    name: "dev-staging.io.",
-    type: "Public",
-    createdBy: "Route 53",
-    recordCount: 6,
-    description: "Staging and testing environment",
-  },
-];
+import {
+  HostedZoneItem,
+  getHostedZones,
+  ApiError,
+} from "@/lib/api/hostedZones";
 
 export default function HostedZonesPage() {
-  const [hostedZones, setHostedZones] = useState<HostedZoneView[]>(INITIAL_MOCK_DATA);
+  const [hostedZones, setHostedZones] = useState<HostedZoneItem[]>([]);
+  const [totalItems, setTotalItems] = useState<number>(0);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [notification, setNotification] = useState<{
-    type: "success" | "error" | "info";
+    type: "success" | "error" | "info" | "warning";
     title?: string;
     message: string;
   } | null>(null);
 
-  // Attempt to fetch live hosted zones from backend on mount or refresh
-  const loadHostedZones = async () => {
-    setIsRefreshing(true);
-    try {
-      const response = await getHostedZones(1, 100);
-      if (response && Array.isArray(response.items)) {
-        const mapped: HostedZoneView[] = response.items.map((item) => ({
-          id: item.id,
-          name: item.name,
-          type: item.is_private ? "Private" : "Public",
-          createdBy: "Route 53",
-          recordCount: item.record_count || 2,
-          description: item.comment || "-",
-        }));
-        setHostedZones(mapped);
+  // Fetch hosted zones from FastAPI backend
+  const fetchZones = useCallback(
+    async (page: number, search: string, showRefreshSpinner = false) => {
+      if (showRefreshSpinner) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
       }
-    } catch {
-      // Fallback silently to existing local state if backend is offline or unauthenticated
-    } finally {
-      setIsRefreshing(false);
-    }
+
+      try {
+        const response = await getHostedZones(page, pageSize, search);
+        setHostedZones(response.items || []);
+        setTotalItems(response.total || 0);
+        setCurrentPage(response.page || page);
+      } catch (err: any) {
+        if (err instanceof ApiError) {
+          setNotification({
+            type: "error",
+            title: "Failed to load hosted zones",
+            message: err.message,
+          });
+        } else {
+          setNotification({
+            type: "error",
+            title: "Error connecting to server",
+            message:
+              err?.message || "An unexpected error occurred while fetching hosted zones.",
+          });
+        }
+        setHostedZones([]);
+        setTotalItems(0);
+      } finally {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    },
+    [pageSize]
+  );
+
+  // Initial load and whenever page or search changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchZones(currentPage, searchTerm);
+    }, 300); // 300ms debounce for search input
+
+    return () => clearTimeout(timer);
+  }, [fetchZones, currentPage, searchTerm]);
+
+  // Handle Search Input changes (resets to page 1)
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+    setCurrentPage(1);
   };
 
+  const handleClearSearch = () => {
+    setSearchTerm("");
+    setCurrentPage(1);
+  };
+
+  // Handle Manual Refresh
   const handleRefresh = () => {
-    loadHostedZones();
+    fetchZones(currentPage, searchTerm, true);
   };
 
-  // Filtered zones based on search query
-  const filteredZones = useMemo(() => {
-    if (!searchTerm.trim()) return hostedZones;
-    const query = searchTerm.toLowerCase().trim();
-    return hostedZones.filter(
-      (z) =>
-        z.name.toLowerCase().includes(query) ||
-        z.type.toLowerCase().includes(query) ||
-        z.description.toLowerCase().includes(query) ||
-        z.id.toLowerCase().includes(query)
-    );
-  }, [hostedZones, searchTerm]);
-
-  // Paginated zones
-  const totalItems = filteredZones.length;
+  // Pagination calculation
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const startIndex = (currentPage - 1) * pageSize;
-  const paginatedZones = filteredZones.slice(startIndex, startIndex + pageSize);
+  const startIndex = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const endIndex = Math.min(currentPage * pageSize, totalItems);
 
   // Selection handlers
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
-      setSelectedIds(paginatedZones.map((z) => z.id));
+      setSelectedIds(hostedZones.map((z) => z.id));
     } else {
       setSelectedIds([]);
     }
@@ -132,36 +125,15 @@ export default function HostedZonesPage() {
   };
 
   const isAllSelected =
-    paginatedZones.length > 0 &&
-    paginatedZones.every((z) => selectedIds.includes(z.id));
+    hostedZones.length > 0 &&
+    hostedZones.every((z) => selectedIds.includes(z.id));
 
   const hasSelection = selectedIds.length > 0;
   const isSingleSelection = selectedIds.length === 1;
 
-  const handleDeleteMock = () => {
-    if (selectedIds.length === 0) return;
-    setHostedZones((prev) => prev.filter((z) => !selectedIds.includes(z.id)));
-    setSelectedIds([]);
-  };
-
-  // Handle successful creation from modal connected to FastAPI
-  const handleZoneCreated = (createdZone: HostedZoneItem) => {
+  // After creating a zone, refresh the API data and show success alert
+  const handleZoneCreated = async (createdZone: HostedZoneItem) => {
     setIsCreateModalOpen(false);
-
-    const newViewItem: HostedZoneView = {
-      id: createdZone.id,
-      name: createdZone.name,
-      type: createdZone.is_private ? "Private" : "Public",
-      createdBy: "Route 53",
-      recordCount: createdZone.record_count || 2,
-      description: createdZone.comment || "-",
-    };
-
-    // Prepend newly created zone to table
-    setHostedZones((prev) => [
-      newViewItem,
-      ...prev.filter((z) => z.id !== createdZone.id),
-    ]);
 
     // Show AWS-style success notification
     setNotification({
@@ -169,6 +141,10 @@ export default function HostedZonesPage() {
       title: "Successfully created hosted zone",
       message: `Hosted zone "${createdZone.name}" with ID "${createdZone.id}" has been created.`,
     });
+
+    // Refresh data from API
+    setCurrentPage(1);
+    await fetchZones(1, searchTerm);
   };
 
   return (
@@ -187,7 +163,7 @@ export default function HostedZonesPage() {
       {/* 1. Page Header & Top Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <PageHeader
-          title={`Hosted zones (${hostedZones.length})`}
+          title={`Hosted zones (${totalItems})`}
           description="A hosted zone contains records that tell Route 53 how to respond to DNS queries for a domain, such as example.com, and its subdomains."
           infoTitle="Hosted Zones"
           infoDescription="A hosted zone is a container for records, and records contain information about how you want to route traffic for a specific domain, such as example.com, and its subdomains."
@@ -225,7 +201,6 @@ export default function HostedZonesPage() {
             variant="secondary"
             size="md"
             disabled={!hasSelection}
-            onClick={handleDeleteMock}
             icon={<Trash2 className="w-3.5 h-3.5" />}
           >
             Delete
@@ -253,16 +228,13 @@ export default function HostedZonesPage() {
                 type="text"
                 placeholder="Find hosted zone"
                 value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setCurrentPage(1);
-                }}
+                onChange={handleSearchChange}
                 className="bg-transparent border-none outline-none text-xs w-full placeholder-gray-500"
               />
               {searchTerm && (
                 <button
                   type="button"
-                  onClick={() => setSearchTerm("")}
+                  onClick={handleClearSearch}
                   className="text-gray-400 hover:text-gray-600 p-0.5"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -279,7 +251,13 @@ export default function HostedZonesPage() {
         </div>
 
         {/* Table Content */}
-        {paginatedZones.length > 0 ? (
+        {isLoading ? (
+          /* Loading State */
+          <div className="py-16 px-4 text-center">
+            <Loader2 className="w-6 h-6 text-[#ec7211] animate-spin mx-auto mb-2" />
+            <p className="text-xs text-[#545b64]">Loading hosted zones...</p>
+          </div>
+        ) : hostedZones.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
@@ -311,7 +289,7 @@ export default function HostedZonesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#eaeded]">
-                {paginatedZones.map((zone) => {
+                {hostedZones.map((zone) => {
                   const isSelected = selectedIds.includes(zone.id);
                   return (
                     <tr
@@ -346,22 +324,22 @@ export default function HostedZonesPage() {
                       <td className="py-2.5 px-4 text-[#16191f]">
                         <span
                           className={`inline-block px-1.5 py-0.5 text-[11px] font-medium rounded-[2px] ${
-                            zone.type === "Public"
+                            !zone.is_private
                               ? "bg-[#e7f4e4] text-[#1d8102]"
                               : "bg-[#f2f3f3] text-[#545b64]"
                           }`}
                         >
-                          {zone.type}
+                          {zone.is_private ? "Private" : "Public"}
                         </span>
                       </td>
                       <td className="py-2.5 px-4 text-[#545b64]">
-                        {zone.createdBy}
+                        Route 53
                       </td>
                       <td className="py-2.5 px-4 text-[#16191f] font-mono">
-                        {zone.recordCount}
+                        {zone.record_count || 2}
                       </td>
                       <td className="py-2.5 px-4 text-[#545b64] max-w-xs truncate">
-                        {zone.description || "-"}
+                        {zone.comment || "-"}
                       </td>
                     </tr>
                   );
@@ -392,12 +370,10 @@ export default function HostedZonesPage() {
         )}
 
         {/* 3. AWS Pagination Footer */}
-        {paginatedZones.length > 0 && (
+        {!isLoading && totalItems > 0 && (
           <div className="border-t border-[#eaeded] px-4 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#545b64] bg-[#fafafa]">
             <div>
-              Showing {startIndex + 1}-
-              {Math.min(startIndex + pageSize, totalItems)} of {totalItems}{" "}
-              hosted zones
+              Showing {startIndex}-{endIndex} of {totalItems} hosted zones
             </div>
 
             <div className="flex items-center gap-2">
