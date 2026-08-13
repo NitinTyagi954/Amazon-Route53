@@ -293,4 +293,81 @@ def test_update_hosted_zone_invalid_domain(db_session):
         app.dependency_overrides.clear()
 
 
+def test_delete_hosted_zone_success(db_session):
+    """Test DELETE /api/hosted-zones/{zone_id} deletes hosted zone and returns HTTP 204."""
+    user = UserRepository.create(session=db_session, email="deleter@domain.com", hashed_password="hash")
+    zone = HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZDELETEZONE001",
+        user_id=user.id,
+        name="todelete.com.",
+        caller_reference="ref-del-001",
+    )
+
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        response = client.delete(f"/api/hosted-zones/{zone.id}")
+        assert response.status_code == 204
+        assert response.content == b""
+
+        # Verify zone is gone
+        get_res = client.get(f"/api/hosted-zones/{zone.id}")
+        assert get_res.status_code == 404
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_delete_hosted_zone_cascade_records(db_session):
+    """Test DELETE /api/hosted-zones/{zone_id} cascades deletion to associated DNS records."""
+    user = UserRepository.create(session=db_session, email="cascade@domain.com", hashed_password="hash")
+    zone = HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZDELCASCADE001",
+        user_id=user.id,
+        name="cascadezone.com.",
+        caller_reference="ref-delcasc-001",
+    )
+
+    record = DNSRecordRepository.create(
+        session=db_session,
+        hosted_zone_id=zone.id,
+        name="sub.cascadezone.com.",
+        type="A",
+        value="192.168.1.1",
+        ttl=300,
+    )
+    assert DNSRecordRepository.get_by_id(db_session, record.id) is not None
+
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        response = client.delete(f"/api/hosted-zones/{zone.id}")
+        assert response.status_code == 204
+
+        # Verify DNS record was cascade-deleted
+        assert DNSRecordRepository.get_by_id(db_session, record.id) is None
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_delete_hosted_zone_not_found(db_session):
+    """Test DELETE /api/hosted-zones/{zone_id} returns 404 for non-existent zone."""
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        response = client.delete("/api/hosted-zones/ZNONEXISTENTZONE")
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+    finally:
+        app.dependency_overrides.clear()
+
+
+
 

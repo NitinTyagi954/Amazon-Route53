@@ -142,4 +142,21 @@ def update_hosted_zone(
     return updated_zone
 
 
+@router.delete("/{zone_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_hosted_zone(
+    zone_id: str,
+    db: Session = Depends(get_db),
+) -> None:
+    """Delete a Hosted Zone and its associated DNS records by ID."""
+    deleted = HostedZoneRepository.delete(db, zone_id=zone_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Hosted zone '{zone_id}' not found.",
+        )
+    db.commit()
+    return None
+
+
+
 
