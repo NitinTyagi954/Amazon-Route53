@@ -18,6 +18,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { CreateHostedZoneModal } from "@/components/hosted-zones/CreateHostedZoneModal";
+import { EditHostedZoneModal } from "@/components/hosted-zones/EditHostedZoneModal";
 import {
   HostedZoneItem,
   getHostedZones,
@@ -34,6 +35,8 @@ export default function HostedZonesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingZone, setEditingZone] = useState<HostedZoneItem | null>(null);
   const [notification, setNotification] = useState<{
     type: "success" | "error" | "info" | "warning";
     title?: string;
@@ -147,6 +150,30 @@ export default function HostedZonesPage() {
     await fetchZones(1, searchTerm);
   };
 
+  // Get the single selected zone object (for Edit)
+  const selectedZone =
+    isSingleSelection
+      ? hostedZones.find((z) => z.id === selectedIds[0]) ?? null
+      : null;
+
+  const handleEditClick = () => {
+    if (!selectedZone) return;
+    setEditingZone(selectedZone);
+    setIsEditModalOpen(true);
+  };
+
+  const handleZoneUpdated = async (updatedZone: HostedZoneItem) => {
+    setIsEditModalOpen(false);
+    setEditingZone(null);
+    setSelectedIds([]);
+    setNotification({
+      type: "success",
+      title: "Successfully updated hosted zone",
+      message: `Hosted zone "${updatedZone.name}" has been updated.`,
+    });
+    await fetchZones(currentPage, searchTerm);
+  };
+
   return (
     <div className="space-y-4">
       {/* Success / Error Notification */}
@@ -192,6 +219,7 @@ export default function HostedZonesPage() {
             variant="secondary"
             size="md"
             disabled={!isSingleSelection}
+            onClick={handleEditClick}
             icon={<Edit2 className="w-3.5 h-3.5" />}
           >
             Edit
@@ -410,6 +438,17 @@ export default function HostedZonesPage() {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={handleZoneCreated}
+      />
+
+      {/* 5. Edit Hosted Zone Modal */}
+      <EditHostedZoneModal
+        isOpen={isEditModalOpen}
+        zone={editingZone}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditingZone(null);
+        }}
+        onSuccess={handleZoneUpdated}
       />
     </div>
   );
