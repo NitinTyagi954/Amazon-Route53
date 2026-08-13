@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.dependencies import get_db
 from app.models.user import User
 from app.repositories.hosted_zone import HostedZoneRepository
+from app.repositories.dns_record import DNSRecordRepository
 from app.repositories.user import UserRepository
 from app.schemas.hosted_zone import (
     HostedZoneCreate,
@@ -18,6 +19,8 @@ from app.schemas.hosted_zone import (
     HostedZoneResponse,
     PaginatedHostedZoneResponse,
 )
+from app.schemas.dns_record import DNSRecordResponse
+
 
 router = APIRouter(prefix="/api/hosted-zones", tags=["Hosted Zones"])
 
@@ -169,6 +172,22 @@ def delete_hosted_zone(
         )
     db.commit()
     return None
+
+
+@router.get("/{zone_id}/records", response_model=List[DNSRecordResponse])
+def list_hosted_zone_records(
+    zone_id: str,
+    db: Session = Depends(get_db),
+) -> List[DNSRecordResponse]:
+    """List DNS records belonging to a specific Hosted Zone."""
+    zone = HostedZoneRepository.get_by_id(db, zone_id=zone_id)
+    if not zone:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Hosted zone '{zone_id}' not found.",
+        )
+    return DNSRecordRepository.list_by_zone(db, hosted_zone_id=zone_id)
+
 
 
 

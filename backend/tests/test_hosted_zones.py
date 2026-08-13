@@ -535,6 +535,104 @@ def test_list_hosted_zones_pagination_out_of_range(db_session):
         app.dependency_overrides.clear()
 
 
+def test_list_hosted_zone_records_with_data(db_session):
+    """Test GET /api/hosted-zones/{zone_id}/records returns records belonging to the zone."""
+    user = UserRepository.create(session=db_session, email="recuser@domain.com", hashed_password="hash")
+    zone1 = HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZRECLIST001",
+        user_id=user.id,
+        name="zoneone.com.",
+        caller_reference="ref-rec-001",
+    )
+    zone2 = HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZRECLIST002",
+        user_id=user.id,
+        name="zonetwo.com.",
+        caller_reference="ref-rec-002",
+    )
+
+    r1 = DNSRecordRepository.create(
+        session=db_session,
+        hosted_zone_id=zone1.id,
+        name="zoneone.com.",
+        type="SOA",
+        value="ns1.dns.com. hostmaster.dns.com. 1 7200 900 1209600 86400",
+        is_system_record=True,
+    )
+    r2 = DNSRecordRepository.create(
+        session=db_session,
+        hosted_zone_id=zone1.id,
+        name="api.zoneone.com.",
+        type="A",
+        value="10.0.0.1",
+        ttl=300,
+    )
+    # Record for zone2 (should not be returned in zone1 request)
+    DNSRecordRepository.create(
+        session=db_session,
+        hosted_zone_id=zone2.id,
+        name="zoneother.com.",
+        type="A",
+        value="192.168.0.1",
+    )
+
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        res = client.get(f"/api/hosted-zones/{zone1.id}/records")
+        assert res.status_code == 200
+        records = res.json()
+        assert len(records) == 2
+        rec_ids = {r["id"] for r in records}
+        assert r1.id in rec_ids
+        assert r2.id in rec_ids
+        assert all(r["hosted_zone_id"] == zone1.id for r in records)
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_list_hosted_zone_records_empty(db_session):
+    """Test GET /api/hosted-zones/{zone_id}/records returns empty list when zone has no records."""
+    user = UserRepository.create(session=db_session, email="emptyrec@domain.com", hashed_password="hash")
+    zone = HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZEMPTYREC001",
+        user_id=user.id,
+        name="emptyrec.com.",
+        caller_reference="ref-emptyrec-001",
+    )
+
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        res = client.get(f"/api/hosted-zones/{zone.id}/records")
+        assert res.status_code == 200
+        assert res.json() == []
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_list_hosted_zone_records_not_found(db_session):
+    """Test GET /api/hosted-zones/{zone_id}/records returns 404 for non-existent zone."""
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        res = client.get("/api/hosted-zones/ZNONEXISTENTZONE/records")
+        assert res.status_code == 404
+        assert "not found" in res.json()["detail"].lower()
+    finally:
+        app.dependency_overrides.clear()
+
+
+
 
 
 
