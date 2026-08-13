@@ -79,7 +79,7 @@ def test_list_hosted_zones_with_data(db_session):
         z1_data = next(z for z in items if z["id"] == "ZAPIZONE001")
         assert z1_data["name"] == "company1.com."
         assert z1_data["comment"] == "Primary Company Zone"
-        assert z1_data["record_count"] == 1
+        assert z1_data["record_count"] == 3  # 2 auto + 1 manual SOA
         assert z1_data["is_private"] is False
         assert "created_at" in z1_data
         assert "updated_at" in z1_data
@@ -87,7 +87,7 @@ def test_list_hosted_zones_with_data(db_session):
         z2_data = next(z for z in items if z["id"] == "ZAPIZONE002")
         assert z2_data["name"] == "private.internal."
         assert z2_data["is_private"] is True
-        assert z2_data["record_count"] == 0
+        assert z2_data["record_count"] == 2  # SOA + NS auto-created
 
         # Request without filter returns all zones
         all_response = client.get("/api/hosted-zones")
@@ -126,9 +126,28 @@ def test_create_hosted_zone_success(db_session):
         assert data["caller_reference"] == "ref-custom-001"
         assert data["comment"] == "New production zone"
         assert data["is_private"] is False
-        assert data["record_count"] == 0
+        assert data["record_count"] == 2
         assert "created_at" in data
         assert "updated_at" in data
+
+        # Verify system records were created and are protected
+        records_res = client.get(f"/api/hosted-zones/{data['id']}/records")
+        records_data = records_res.json()["items"]
+        assert len(records_data) == 2
+        types = {r["type"] for r in records_data}
+        assert "SOA" in types
+        assert "NS" in types
+        for r in records_data:
+            assert r["is_system_record"] is True
+            assert r["name"] == "newzone.com."
+            
+            # Verify protected from update
+            put_res = client.put(f"/api/records/{r['id']}", json={"value": "newvalue"})
+            assert put_res.status_code == 400
+            
+            # Verify protected from delete
+            del_res = client.delete(f"/api/records/{r['id']}")
+            assert del_res.status_code == 400
     finally:
         app.dependency_overrides.clear()
 
@@ -211,7 +230,7 @@ def test_get_hosted_zone_success(db_session):
         assert data["caller_reference"] == "ref-single-001"
         assert data["comment"] == "Single zone test"
         assert data["is_private"] is True
-        assert data["record_count"] == 0
+        assert data["record_count"] == 2  # SOA + NS auto-created
     finally:
         app.dependency_overrides.clear()
 
@@ -263,7 +282,7 @@ def test_update_hosted_zone_success(db_session):
         # Verify immutable fields remain unchanged
         assert data["user_id"] == user.id
         assert data["caller_reference"] == "ref-upd-001"
-        assert data["record_count"] == 0
+        assert data["record_count"] == 2  # SOA + NS auto-created
     finally:
         app.dependency_overrides.clear()
 
@@ -587,8 +606,8 @@ def test_list_hosted_zone_records_with_data(db_session):
         assert res.status_code == 200
         res_data = res.json()
         records = res_data["items"]
-        assert len(records) == 2
-        assert res_data["total"] == 2
+        assert len(records) == 4  # 2 auto + 2 manual
+        assert res_data["total"] == 4
         assert res_data["page"] == 1
         assert res_data["limit"] == 10
         rec_ids = {r["id"] for r in records}
@@ -618,8 +637,8 @@ def test_list_hosted_zone_records_empty(db_session):
         res = client.get(f"/api/hosted-zones/{zone.id}/records")
         assert res.status_code == 200
         data = res.json()
-        assert data["items"] == []
-        assert data["total"] == 0
+        assert len(data["items"]) == 2  # SOA + NS auto-created
+        assert data["total"] == 2
         assert data["page"] == 1
         assert data["limit"] == 10
     finally:
@@ -669,10 +688,10 @@ def test_list_hosted_zone_records_pagination_custom(db_session):
         res = client.get(f"/api/hosted-zones/{zone.id}/records?page=2&limit=2")
         assert res.status_code == 200
         data = res.json()
-        assert len(data["items"]) == 1
-        assert data["total"] == 3
+        assert data["total"] == 5  # 2 auto + 3 manual
         assert data["page"] == 2
         assert data["limit"] == 2
+        assert len(data["items"]) == 2
     finally:
         app.dependency_overrides.clear()
 
@@ -730,7 +749,7 @@ def test_list_hosted_zone_records_pagination_out_of_range(db_session):
         assert res.status_code == 200
         data = res.json()
         assert len(data["items"]) == 0
-        assert data["total"] == 1
+        assert data["total"] == 3  # 2 auto + 1 manual
         assert data["page"] == 999
         assert data["limit"] == 10
     finally:
@@ -748,7 +767,7 @@ def test_create_hosted_zone_record_success(db_session):
         name="mytestdomain.com.",
         caller_reference="ref-addrec-001",
     )
-    assert zone.record_count == 0
+    assert zone.record_count == 2  # SOA + NS auto-created
 
     def _get_db_override():
         yield db_session
@@ -774,7 +793,7 @@ def test_create_hosted_zone_record_success(db_session):
 
         # Verify updated record count in DB
         updated_zone = HostedZoneRepository.get_by_id(db_session, zone.id)
-        assert updated_zone.record_count == 1
+        assert updated_zone.record_count == 3  # 2 auto + 1 new A record
     finally:
         app.dependency_overrides.clear()
 

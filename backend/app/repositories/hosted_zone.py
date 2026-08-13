@@ -18,16 +18,44 @@ class HostedZoneRepository:
         comment: Optional[str] = None,
         is_private: bool = False,
     ) -> HostedZone:
+        zone_name = name if name.endswith(".") else f"{name}."
         zone = HostedZone(
             id=zone_id,
             user_id=user_id,
-            name=name if name.endswith(".") else f"{name}.",
+            name=zone_name,
             caller_reference=caller_reference,
             comment=comment,
             is_private=is_private,
         )
         session.add(zone)
         session.flush()
+
+        from app.repositories.dns_record import DNSRecordRepository
+
+        # Create SOA record
+        soa_value = "ns-1536.awsdns-00.co.uk. awsdns-hostmaster.amazon.com. 1 7200 900 1209600 86400"
+        DNSRecordRepository.create(
+            session=session,
+            hosted_zone_id=zone.id,
+            name=zone_name,
+            type="SOA",
+            value=soa_value,
+            ttl=900,
+            is_system_record=True,
+        )
+
+        # Create NS record
+        ns_value = "ns-1536.awsdns-00.co.uk.\nns-0.awsdns-00.com.\nns-1024.awsdns-00.org.\nns-512.awsdns-00.net."
+        DNSRecordRepository.create(
+            session=session,
+            hosted_zone_id=zone.id,
+            name=zone_name,
+            type="NS",
+            value=ns_value,
+            ttl=172800,
+            is_system_record=True,
+        )
+
         return zone
 
     @staticmethod

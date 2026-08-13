@@ -39,7 +39,7 @@ def test_hosted_zone_and_records(db_session):
     )
     assert zone.id == "Z0123456789ABCDEF"
     assert zone.name == "mycompany.com."
-    assert zone.record_count == 0
+    assert zone.record_count == 2  # SOA + NS auto-created
 
     # Create system record (SOA)
     soa_record = DNSRecordRepository.create(
@@ -52,7 +52,7 @@ def test_hosted_zone_and_records(db_session):
         is_system_record=True,
     )
     assert soa_record.is_system_record is True
-    assert zone.record_count == 1
+    assert zone.record_count == 3  # 2 auto + 1 manual SOA
 
     # Create user record (A)
     a_record = DNSRecordRepository.create(
@@ -65,7 +65,7 @@ def test_hosted_zone_and_records(db_session):
         is_system_record=False,
     )
     assert a_record.is_system_record is False
-    assert zone.record_count == 2
+    assert zone.record_count == 4  # 2 auto + 1 manual SOA + 1 A record
 
 
 def test_prevent_system_record_deletion(db_session):
@@ -129,7 +129,7 @@ def test_cascade_delete_hosted_zone(db_session):
         value='"v=spf1 ~all"',
     )
 
-    assert len(DNSRecordRepository.list_by_zone(db_session, zone.id)) == 2
+    assert len(DNSRecordRepository.list_by_zone(db_session, zone.id)) == 4  # 2 auto + 2 manual
 
     HostedZoneRepository.delete(db_session, zone.id)
 
@@ -150,7 +150,7 @@ def test_record_count_tracking_on_create_and_delete(db_session):
         name="trackingdomain.com.",
         caller_reference="ref-track-001",
     )
-    assert zone.record_count == 0
+    assert zone.record_count == 2  # SOA + NS auto-created
 
     # 1. Create records and verify record_count increments
     r1 = DNSRecordRepository.create(
@@ -161,7 +161,7 @@ def test_record_count_tracking_on_create_and_delete(db_session):
         value="ns1.dns.com. hostmaster.dns.com. 1 7200 900 1209600 86400",
         is_system_record=True,
     )
-    assert zone.record_count == 1
+    assert zone.record_count == 3  # 2 auto + 1 manual SOA
 
     r2 = DNSRecordRepository.create(
         session=db_session,
@@ -170,7 +170,7 @@ def test_record_count_tracking_on_create_and_delete(db_session):
         type="A",
         value="192.0.2.50",
     )
-    assert zone.record_count == 2
+    assert zone.record_count == 4
 
     r3 = DNSRecordRepository.create(
         session=db_session,
@@ -179,19 +179,19 @@ def test_record_count_tracking_on_create_and_delete(db_session):
         type="MX",
         value="10 mailserver.dns.com.",
     )
-    assert zone.record_count == 3
+    assert zone.record_count == 5
 
     # 2. Delete a record and verify record_count decrements
     DNSRecordRepository.delete(db_session, r3.id)
-    assert zone.record_count == 2
+    assert zone.record_count == 4
 
     # Delete another record (with allow_system_delete=True for system record) and verify decrement
     DNSRecordRepository.delete(db_session, r1.id, allow_system_delete=True)
-    assert zone.record_count == 1
+    assert zone.record_count == 3
 
     # Delete remaining record
     DNSRecordRepository.delete(db_session, r2.id)
-    assert zone.record_count == 0
+    assert zone.record_count == 2  # only the 2 auto-created remain
 
 
 def test_all_route53_record_types(db_session):
@@ -232,7 +232,7 @@ def test_all_route53_record_types(db_session):
         assert rec.value == value
 
     records_in_db = DNSRecordRepository.list_by_zone(db_session, zone.id)
-    assert len(records_in_db) == len(test_records)
+    assert len(records_in_db) == len(test_records) + 2  # +2 auto-created SOA/NS
     created_types = {r.type for r in records_in_db}
     assert created_types == {"A", "AAAA", "CNAME", "TXT", "MX", "NS", "PTR", "SRV", "CAA", "SOA"}
 

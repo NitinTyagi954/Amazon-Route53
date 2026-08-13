@@ -204,7 +204,7 @@ def test_delete_dns_record_success(db_session):
         value="1.2.3.4",
         ttl=300,
     )
-    assert zone.record_count == 1
+    assert zone.record_count == 3  # 2 auto + 1 manual
 
     def _get_db_override():
         yield db_session
@@ -220,7 +220,7 @@ def test_delete_dns_record_success(db_session):
 
         # Verify parent zone record_count decremented to 0
         updated_zone = HostedZoneRepository.get_by_id(db_session, zone.id)
-        assert updated_zone.record_count == 0
+        assert updated_zone.record_count == 2  # only the 2 auto-created remain
     finally:
         app.dependency_overrides.clear()
 
