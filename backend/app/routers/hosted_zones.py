@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.dependencies import get_db
+from app.dependencies import get_db, get_current_user
 from app.models.user import User
 from app.repositories.hosted_zone import HostedZoneRepository
 from app.repositories.dns_record import DNSRecordRepository
@@ -45,10 +45,11 @@ def list_hosted_zones(
     page: int = Query(1, ge=1, description="Page number (starting at 1)"),
     limit: int = Query(10, ge=1, le=100, description="Page size limit (1 to 100)"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> PaginatedHostedZoneResponse:
     """Retrieve paginated hosted zones, optionally filtered by user ID or domain name search query."""
     items, total = HostedZoneRepository.list_paginated(
-        db, user_id=user_id, search=search, page=page, limit=limit
+        db, user_id=current_user.id, search=search, page=page, limit=limit
     )
     return PaginatedHostedZoneResponse(
         items=items,
@@ -65,31 +66,10 @@ def list_hosted_zones(
 def create_hosted_zone(
     zone_in: HostedZoneCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> HostedZoneResponse:
     """Create a new Route 53 Hosted Zone."""
-    user_id = zone_in.user_id
-    if not user_id:
-        first_user = db.query(User).first()
-        if first_user:
-            user_id = first_user.id
-        else:
-            default_user = UserRepository.create(
-                session=db,
-                email="default@route53.local",
-                hashed_password="defaultpasswordhash",
-                full_name="Default Route53 User",
-            )
-            user_id = default_user.id
-    else:
-        existing_user = UserRepository.get_by_id(db, user_id)
-        if not existing_user:
-            existing_user = UserRepository.create(
-                session=db,
-                email=f"{user_id}@route53.local",
-                hashed_password="defaultpasswordhash",
-                full_name=f"User {user_id}",
-            )
-            user_id = existing_user.id
+    user_id = current_user.id
 
     caller_ref = zone_in.caller_reference or generate_caller_reference()
 
