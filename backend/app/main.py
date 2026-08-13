@@ -6,12 +6,15 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.dependencies import get_db
+from app.routers.hosted_zones import router as hosted_zones_router
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     description="AWS Route 53 Clone API Foundation",
 )
+
+app.include_router(hosted_zones_router)
 
 
 @app.get("/health", tags=["Health"])

@@ -42,6 +42,11 @@ class HostedZoneRepository:
         return list(session.scalars(stmt).all())
 
     @staticmethod
+    def list_all(session: Session) -> List[HostedZone]:
+        stmt = select(HostedZone)
+        return list(session.scalars(stmt).all())
+
+    @staticmethod
     def delete(session: Session, zone_id: str) -> bool:
         zone = session.get(HostedZone, zone_id)
         if zone:
