@@ -172,3 +172,50 @@ def test_create_hosted_zone_duplicate_caller_reference(db_session):
     finally:
         app.dependency_overrides.clear()
 
+
+def test_get_hosted_zone_success(db_session):
+    """Test GET /api/hosted-zones/{zone_id} returns existing hosted zone."""
+    user = UserRepository.create(session=db_session, email="getsingle@domain.com", hashed_password="hash")
+    zone = HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZSINGLEZONE001",
+        user_id=user.id,
+        name="singlezone.org.",
+        caller_reference="ref-single-001",
+        comment="Single zone test",
+        is_private=True,
+    )
+
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        response = client.get(f"/api/hosted-zones/{zone.id}")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == "ZSINGLEZONE001"
+        assert data["name"] == "singlezone.org."
+        assert data["user_id"] == user.id
+        assert data["caller_reference"] == "ref-single-001"
+        assert data["comment"] == "Single zone test"
+        assert data["is_private"] is True
+        assert data["record_count"] == 0
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_get_hosted_zone_not_found(db_session):
+    """Test GET /api/hosted-zones/{zone_id} returns 404 when zone does not exist."""
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        response = client.get("/api/hosted-zones/ZNONEXISTENTZONE")
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+    finally:
+        app.dependency_overrides.clear()
+
+

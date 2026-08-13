@@ -99,3 +99,19 @@ def create_hosted_zone(
             detail="A hosted zone with this caller reference already exists.",
         )
 
+
+@router.get("/{zone_id}", response_model=HostedZoneResponse)
+def get_hosted_zone(
+    zone_id: str,
+    db: Session = Depends(get_db),
+) -> HostedZoneResponse:
+    """Retrieve a single Hosted Zone by ID."""
+    zone = HostedZoneRepository.get_by_id(db, zone_id=zone_id)
+    if not zone:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Hosted zone '{zone_id}' not found.",
+        )
+    return zone
+
+
