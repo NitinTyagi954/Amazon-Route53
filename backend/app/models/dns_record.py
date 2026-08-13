@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING
 from sqlalchemy import String, Boolean, Integer, Text, DateTime, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.app.database.base import Base
+from app.database.base import Base
 
 if TYPE_CHECKING:
-    from backend.app.models.hosted_zone import HostedZone
+    from app.models.hosted_zone import HostedZone
 
 
 VALID_RECORD_TYPES = {"A", "AAAA", "CNAME", "TXT", "MX", "NS", "PTR", "SRV", "CAA", "SOA"}

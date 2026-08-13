@@ -5,11 +5,11 @@ from typing import List, TYPE_CHECKING
 from sqlalchemy import String, Boolean, Integer, Text, DateTime, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.app.database.base import Base
+from app.database.base import Base
 
 if TYPE_CHECKING:
-    from backend.app.models.user import User
-    from backend.app.models.dns_record import DNSRecord
+    from app.models.user import User
+    from app.models.dns_record import DNSRecord
 
 
 class HostedZone(Base):

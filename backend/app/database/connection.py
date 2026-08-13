@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from sqlalchemy import create_engine, Engine
 from sqlalchemy.orm import sessionmaker, Session
 
-from backend.app.core.config import settings
+from app.core.config import settings
 
 _engine: Engine | None = None
 _SessionFactory: sessionmaker | None = None

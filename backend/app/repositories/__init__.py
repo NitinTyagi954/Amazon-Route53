@@ -1,8 +1,8 @@
 """Repositories package."""
 
-from backend.app.repositories.user import UserRepository
-from backend.app.repositories.hosted_zone import HostedZoneRepository
-from backend.app.repositories.dns_record import DNSRecordRepository
+from app.repositories.user import UserRepository
+from app.repositories.hosted_zone import HostedZoneRepository
+from app.repositories.dns_record import DNSRecordRepository
 
 __all__ = [
     "UserRepository",

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from backend.app.models.dns_record import VALID_RECORD_TYPES
+from app.models.dns_record import VALID_RECORD_TYPES
 
 RecordTypeLiteral = Literal["A", "AAAA", "CNAME", "TXT", "MX", "NS", "PTR", "SRV", "CAA", "SOA"]
 

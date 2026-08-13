@@ -4,7 +4,7 @@ from typing import List, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.models.hosted_zone import HostedZone
+from app.models.hosted_zone import HostedZone
 
 
 class HostedZoneRepository:

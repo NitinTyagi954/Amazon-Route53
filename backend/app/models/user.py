@@ -6,11 +6,11 @@ from typing import List, TYPE_CHECKING
 from sqlalchemy import String, Boolean, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.app.database.base import Base
+from app.database.base import Base
 
 if TYPE_CHECKING:
-    from backend.app.models.session import Session
-    from backend.app.models.hosted_zone import HostedZone
+    from app.models.session import Session
+    from app.models.hosted_zone import HostedZone
 
 
 class User(Base):

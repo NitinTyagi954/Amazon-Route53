@@ -1,7 +1,7 @@
 """AWS Route 53 Clone - FastAPI Application Entry Point."""
 
 from fastapi import FastAPI
-from backend.app.core.config import settings
+from app.core.config import settings
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

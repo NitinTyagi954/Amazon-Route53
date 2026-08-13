@@ -10,8 +10,8 @@ from alembic import context
 # Add backend directory to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
-from backend.app.models import Base
-from backend.app.core.config import settings
+from app.models import Base
+from app.core.config import settings
 
 # this is the Alembic Config object
 config = context.config

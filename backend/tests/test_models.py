@@ -1,7 +1,7 @@
 """Unit tests for models, repositories, and relationships."""
 
 import pytest
-from backend.app.repositories import UserRepository, HostedZoneRepository, DNSRecordRepository
+from app.repositories import UserRepository, HostedZoneRepository, DNSRecordRepository
 
 
 def test_user_creation(db_session):
@@ -259,7 +259,7 @@ def test_invalid_record_type_validation(db_session):
         )
 
     # Pydantic schema validation
-    from backend.app.schemas.dns_record import DNSRecordCreate
+    from app.schemas.dns_record import DNSRecordCreate
     with pytest.raises(ValueError, match="Invalid DNS record type 'INVALID_TYPE'"):
         DNSRecordCreate(
             hosted_zone_id=zone.id,

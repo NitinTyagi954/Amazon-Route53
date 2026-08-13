@@ -4,8 +4,8 @@ from typing import List, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.models.dns_record import DNSRecord, VALID_RECORD_TYPES
-from backend.app.models.hosted_zone import HostedZone
+from app.models.dns_record import DNSRecord, VALID_RECORD_TYPES
+from app.models.hosted_zone import HostedZone
 
 
 class DNSRecordRepository:
