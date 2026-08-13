@@ -1,5 +1,9 @@
 """AWS Route 53 Clone - FastAPI Application Entry Point."""
 
+import logging
+from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator
+
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -8,11 +12,43 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.dependencies import get_db
 from app.routers import hosted_zones_router, dns_records_router, auth_router
+from app.database.connection import get_db_session
+from app.repositories.user import UserRepository
+from app.core.security import hash_password
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Demo account credentials (must match frontend "Try Demo Account" button)
+# ---------------------------------------------------------------------------
+DEMO_EMAIL = "demo@route53.example.com"
+DEMO_PASSWORD = "Demo@12345"
+DEMO_FULL_NAME = "Demo User"
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Seed the demo user on startup so the 'Try Demo Account' button works."""
+    with get_db_session() as db:
+        existing = UserRepository.get_by_email(db, DEMO_EMAIL)
+        if existing is None:
+            UserRepository.create(
+                session=db,
+                email=DEMO_EMAIL,
+                hashed_password=hash_password(DEMO_PASSWORD),
+                full_name=DEMO_FULL_NAME,
+            )
+            logger.info("Demo user seeded: %s", DEMO_EMAIL)
+        else:
+            logger.info("Demo user already exists: %s", DEMO_EMAIL)
+    yield
+
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     description="AWS Route 53 Clone API Foundation",
+    lifespan=lifespan,
 )
 
 # ---------------------------------------------------------------------------
@@ -59,3 +95,4 @@ def root() -> dict:
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
+
