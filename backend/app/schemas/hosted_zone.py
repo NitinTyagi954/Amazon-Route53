@@ -87,3 +87,11 @@ class HostedZoneResponse(HostedZoneBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PaginatedHostedZoneResponse(BaseModel):
+    items: list[HostedZoneResponse]
+    total: int = Field(..., description="Total count of matching hosted zones")
+    page: int = Field(..., description="Current page number")
+    limit: int = Field(..., description="Page size limit")
+
+
+

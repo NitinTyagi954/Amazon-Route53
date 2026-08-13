@@ -1,7 +1,5 @@
-"""Hosted Zone Repository Data Access Layer."""
-
-from typing import List, Optional
-from sqlalchemy import select
+from typing import List, Optional, Tuple
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from app.models.hosted_zone import HostedZone
@@ -52,6 +50,30 @@ class HostedZoneRepository:
         if search and search.strip():
             stmt = stmt.where(HostedZone.name.ilike(f"%{search.strip()}%"))
         return list(session.scalars(stmt).all())
+
+    @staticmethod
+    def list_paginated(
+        session: Session,
+        user_id: Optional[str] = None,
+        search: Optional[str] = None,
+        page: int = 1,
+        limit: int = 10,
+    ) -> Tuple[List[HostedZone], int]:
+        stmt = select(HostedZone)
+        if user_id:
+            stmt = stmt.where(HostedZone.user_id == user_id)
+        if search and search.strip():
+            stmt = stmt.where(HostedZone.name.ilike(f"%{search.strip()}%"))
+
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        total = session.scalar(count_stmt) or 0
+
+        offset = (page - 1) * limit
+        stmt = stmt.offset(offset).limit(limit)
+        items = list(session.scalars(stmt).all())
+
+        return items, total
+
 
 
     @staticmethod

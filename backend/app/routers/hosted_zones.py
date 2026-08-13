@@ -12,10 +12,14 @@ from app.dependencies import get_db
 from app.models.user import User
 from app.repositories.hosted_zone import HostedZoneRepository
 from app.repositories.user import UserRepository
-from app.schemas.hosted_zone import HostedZoneCreate, HostedZoneUpdate, HostedZoneResponse
+from app.schemas.hosted_zone import (
+    HostedZoneCreate,
+    HostedZoneUpdate,
+    HostedZoneResponse,
+    PaginatedHostedZoneResponse,
+)
 
 router = APIRouter(prefix="/api/hosted-zones", tags=["Hosted Zones"])
-
 
 
 def generate_zone_id() -> str:
@@ -29,19 +33,26 @@ def generate_caller_reference() -> str:
     return f"ref-{uuid.uuid4().hex[:12]}"
 
 
-@router.get("", response_model=List[HostedZoneResponse])
-@router.get("/", response_model=List[HostedZoneResponse], include_in_schema=False)
+@router.get("", response_model=PaginatedHostedZoneResponse)
+@router.get("/", response_model=PaginatedHostedZoneResponse, include_in_schema=False)
 def list_hosted_zones(
     user_id: Optional[str] = Query(None, description="Optional filter by owner User ID"),
     search: Optional[str] = Query(None, description="Optional case-insensitive search by domain name"),
+    page: int = Query(1, ge=1, description="Page number (starting at 1)"),
+    limit: int = Query(10, ge=1, le=100, description="Page size limit (1 to 100)"),
     db: Session = Depends(get_db),
-) -> List[HostedZoneResponse]:
-    """Retrieve hosted zones, optionally filtered by user ID or domain name search query."""
-    if user_id:
-        zones = HostedZoneRepository.list_by_user(db, user_id=user_id, search=search)
-    else:
-        zones = HostedZoneRepository.list_all(db, search=search)
-    return zones
+) -> PaginatedHostedZoneResponse:
+    """Retrieve paginated hosted zones, optionally filtered by user ID or domain name search query."""
+    items, total = HostedZoneRepository.list_paginated(
+        db, user_id=user_id, search=search, page=page, limit=limit
+    )
+    return PaginatedHostedZoneResponse(
+        items=items,
+        total=total,
+        page=page,
+        limit=limit,
+    )
+
 
 
 
