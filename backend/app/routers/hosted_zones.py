@@ -33,14 +33,16 @@ def generate_caller_reference() -> str:
 @router.get("/", response_model=List[HostedZoneResponse], include_in_schema=False)
 def list_hosted_zones(
     user_id: Optional[str] = Query(None, description="Optional filter by owner User ID"),
+    search: Optional[str] = Query(None, description="Optional case-insensitive search by domain name"),
     db: Session = Depends(get_db),
 ) -> List[HostedZoneResponse]:
-    """Retrieve hosted zones for the user or all hosted zones if no filter provided."""
+    """Retrieve hosted zones, optionally filtered by user ID or domain name search query."""
     if user_id:
-        zones = HostedZoneRepository.list_by_user(db, user_id=user_id)
+        zones = HostedZoneRepository.list_by_user(db, user_id=user_id, search=search)
     else:
-        zones = HostedZoneRepository.list_all(db)
+        zones = HostedZoneRepository.list_all(db, search=search)
     return zones
+
 
 
 @router.post("", response_model=HostedZoneResponse, status_code=status.HTTP_201_CREATED)

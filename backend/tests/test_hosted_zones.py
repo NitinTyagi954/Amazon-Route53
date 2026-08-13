@@ -369,5 +369,59 @@ def test_delete_hosted_zone_not_found(db_session):
         app.dependency_overrides.clear()
 
 
+def test_list_hosted_zones_search(db_session):
+    """Test GET /api/hosted-zones search query parameter with matching, case-insensitive, and no-match cases."""
+    user = UserRepository.create(session=db_session, email="searchuser@domain.com", hashed_password="hash")
+
+    HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZSEARCH001",
+        user_id=user.id,
+        name="alpha-app.com.",
+        caller_reference="ref-srch-001",
+    )
+    HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZSEARCH002",
+        user_id=user.id,
+        name="beta-service.org.",
+        caller_reference="ref-srch-002",
+    )
+    HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZSEARCH003",
+        user_id=user.id,
+        name="alpha-admin.io.",
+        caller_reference="ref-srch-003",
+    )
+
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        # Matching query
+        res_matching = client.get(f"/api/hosted-zones?user_id={user.id}&search=alpha")
+        assert res_matching.status_code == 200
+        data_matching = res_matching.json()
+        assert len(data_matching) == 2
+        assert {z["name"] for z in data_matching} == {"alpha-app.com.", "alpha-admin.io."}
+
+        # Case-insensitive matching
+        res_case = client.get(f"/api/hosted-zones?user_id={user.id}&search=BETA")
+        assert res_case.status_code == 200
+        data_case = res_case.json()
+        assert len(data_case) == 1
+        assert data_case[0]["name"] == "beta-service.org."
+
+        # No match results
+        res_nomatch = client.get(f"/api/hosted-zones?user_id={user.id}&search=nonexistentdomain")
+        assert res_nomatch.status_code == 200
+        assert res_nomatch.json() == []
+    finally:
+        app.dependency_overrides.clear()
+
+
+
 
 

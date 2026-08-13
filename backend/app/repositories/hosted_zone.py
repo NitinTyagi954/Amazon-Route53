@@ -37,14 +37,22 @@ class HostedZoneRepository:
         return session.get(HostedZone, zone_id)
 
     @staticmethod
-    def list_by_user(session: Session, user_id: str, limit: int = 100, offset: int = 0) -> List[HostedZone]:
-        stmt = select(HostedZone).where(HostedZone.user_id == user_id).limit(limit).offset(offset)
+    def list_by_user(
+        session: Session, user_id: str, search: Optional[str] = None, limit: int = 100, offset: int = 0
+    ) -> List[HostedZone]:
+        stmt = select(HostedZone).where(HostedZone.user_id == user_id)
+        if search and search.strip():
+            stmt = stmt.where(HostedZone.name.ilike(f"%{search.strip()}%"))
+        stmt = stmt.limit(limit).offset(offset)
         return list(session.scalars(stmt).all())
 
     @staticmethod
-    def list_all(session: Session) -> List[HostedZone]:
+    def list_all(session: Session, search: Optional[str] = None) -> List[HostedZone]:
         stmt = select(HostedZone)
+        if search and search.strip():
+            stmt = stmt.where(HostedZone.name.ilike(f"%{search.strip()}%"))
         return list(session.scalars(stmt).all())
+
 
     @staticmethod
     def update(
