@@ -114,17 +114,84 @@ def test_cascade_delete_hosted_zone(db_session):
         name="cascadedomain.com.",
         caller_reference="ref-cas-001",
     )
-    DNSRecordRepository.create(
+    rec1 = DNSRecordRepository.create(
         session=db_session,
         hosted_zone_id=zone.id,
         name="sub.cascadedomain.com.",
         type="CNAME",
         value="target.com.",
     )
+    rec2 = DNSRecordRepository.create(
+        session=db_session,
+        hosted_zone_id=zone.id,
+        name="cascadedomain.com.",
+        type="TXT",
+        value='"v=spf1 ~all"',
+    )
+
+    assert len(DNSRecordRepository.list_by_zone(db_session, zone.id)) == 2
 
     HostedZoneRepository.delete(db_session, zone.id)
+
+    # Verify Zone and all associated DNS records are deleted
     assert HostedZoneRepository.get_by_id(db_session, zone.id) is None
     assert len(DNSRecordRepository.list_by_zone(db_session, zone.id)) == 0
+    assert DNSRecordRepository.get_by_id(db_session, rec1.id) is None
+    assert DNSRecordRepository.get_by_id(db_session, rec2.id) is None
+
+
+def test_record_count_tracking_on_create_and_delete(db_session):
+    """Verify that hosted_zones.record_count accurately tracks record creation and deletion."""
+    user = UserRepository.create(session=db_session, email="tracker@domain.com", hashed_password="hash")
+    zone = HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZTRACKER001",
+        user_id=user.id,
+        name="trackingdomain.com.",
+        caller_reference="ref-track-001",
+    )
+    assert zone.record_count == 0
+
+    # 1. Create records and verify record_count increments
+    r1 = DNSRecordRepository.create(
+        session=db_session,
+        hosted_zone_id=zone.id,
+        name="trackingdomain.com.",
+        type="SOA",
+        value="ns1.dns.com. hostmaster.dns.com. 1 7200 900 1209600 86400",
+        is_system_record=True,
+    )
+    assert zone.record_count == 1
+
+    r2 = DNSRecordRepository.create(
+        session=db_session,
+        hosted_zone_id=zone.id,
+        name="app.trackingdomain.com.",
+        type="A",
+        value="192.0.2.50",
+    )
+    assert zone.record_count == 2
+
+    r3 = DNSRecordRepository.create(
+        session=db_session,
+        hosted_zone_id=zone.id,
+        name="mail.trackingdomain.com.",
+        type="MX",
+        value="10 mailserver.dns.com.",
+    )
+    assert zone.record_count == 3
+
+    # 2. Delete a record and verify record_count decrements
+    DNSRecordRepository.delete(db_session, r3.id)
+    assert zone.record_count == 2
+
+    # Delete another record (with allow_system_delete=True for system record) and verify decrement
+    DNSRecordRepository.delete(db_session, r1.id, allow_system_delete=True)
+    assert zone.record_count == 1
+
+    # Delete remaining record
+    DNSRecordRepository.delete(db_session, r2.id)
+    assert zone.record_count == 0
 
 
 def test_all_route53_record_types(db_session):
