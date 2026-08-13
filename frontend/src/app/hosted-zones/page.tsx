@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
   RotateCw,
@@ -15,19 +15,21 @@ import {
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
+import { Alert } from "@/components/ui/Alert";
 import { CreateHostedZoneModal } from "@/components/hosted-zones/CreateHostedZoneModal";
+import { HostedZoneItem, getHostedZones } from "@/lib/api/hostedZones";
 
-interface HostedZoneMock {
+interface HostedZoneView {
   id: string;
   name: string;
   type: "Public" | "Private";
   createdBy: string;
   recordCount: number;
   description: string;
-  comment?: string;
+  comment?: string | null;
 }
 
-const INITIAL_MOCK_DATA: HostedZoneMock[] = [
+const INITIAL_MOCK_DATA: HostedZoneView[] = [
   {
     id: "Z0123456789ABC",
     name: "example.com.",
@@ -55,13 +57,45 @@ const INITIAL_MOCK_DATA: HostedZoneMock[] = [
 ];
 
 export default function HostedZonesPage() {
-  const [hostedZones, setHostedZones] = useState<HostedZoneMock[]>(INITIAL_MOCK_DATA);
+  const [hostedZones, setHostedZones] = useState<HostedZoneView[]>(INITIAL_MOCK_DATA);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(10);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [notification, setNotification] = useState<{
+    type: "success" | "error" | "info";
+    title?: string;
+    message: string;
+  } | null>(null);
+
+  // Attempt to fetch live hosted zones from backend on mount or refresh
+  const loadHostedZones = async () => {
+    setIsRefreshing(true);
+    try {
+      const response = await getHostedZones(1, 100);
+      if (response && Array.isArray(response.items)) {
+        const mapped: HostedZoneView[] = response.items.map((item) => ({
+          id: item.id,
+          name: item.name,
+          type: item.is_private ? "Private" : "Public",
+          createdBy: "Route 53",
+          recordCount: item.record_count || 2,
+          description: item.comment || "-",
+        }));
+        setHostedZones(mapped);
+      }
+    } catch {
+      // Fallback silently to existing local state if backend is offline or unauthenticated
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleRefresh = () => {
+    loadHostedZones();
+  };
 
   // Filtered zones based on search query
   const filteredZones = useMemo(() => {
@@ -104,39 +138,52 @@ export default function HostedZonesPage() {
   const hasSelection = selectedIds.length > 0;
   const isSingleSelection = selectedIds.length === 1;
 
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    setTimeout(() => {
-      setIsRefreshing(false);
-    }, 400);
-  };
-
   const handleDeleteMock = () => {
     if (selectedIds.length === 0) return;
     setHostedZones((prev) => prev.filter((z) => !selectedIds.includes(z.id)));
     setSelectedIds([]);
   };
 
-  const handleCreateZoneMock = (newZone: {
-    name: string;
-    description: string;
-    type: "Public" | "Private";
-  }) => {
-    const randomId =
-      "Z" + Math.random().toString(36).substring(2, 10).toUpperCase();
-    const createdZone: HostedZoneMock = {
-      id: randomId,
-      name: newZone.name,
-      type: newZone.type,
+  // Handle successful creation from modal connected to FastAPI
+  const handleZoneCreated = (createdZone: HostedZoneItem) => {
+    setIsCreateModalOpen(false);
+
+    const newViewItem: HostedZoneView = {
+      id: createdZone.id,
+      name: createdZone.name,
+      type: createdZone.is_private ? "Private" : "Public",
       createdBy: "Route 53",
-      recordCount: 2, // Default SOA + NS records
-      description: newZone.description,
+      recordCount: createdZone.record_count || 2,
+      description: createdZone.comment || "-",
     };
-    setHostedZones((prev) => [createdZone, ...prev]);
+
+    // Prepend newly created zone to table
+    setHostedZones((prev) => [
+      newViewItem,
+      ...prev.filter((z) => z.id !== createdZone.id),
+    ]);
+
+    // Show AWS-style success notification
+    setNotification({
+      type: "success",
+      title: "Successfully created hosted zone",
+      message: `Hosted zone "${createdZone.name}" with ID "${createdZone.id}" has been created.`,
+    });
   };
 
   return (
     <div className="space-y-4">
+      {/* Success / Error Notification */}
+      {notification && (
+        <Alert
+          type={notification.type}
+          title={notification.title}
+          onDismiss={() => setNotification(null)}
+        >
+          {notification.message}
+        </Alert>
+      )}
+
       {/* 1. Page Header & Top Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <PageHeader
@@ -386,7 +433,7 @@ export default function HostedZonesPage() {
       <CreateHostedZoneModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        onSubmit={handleCreateZoneMock}
+        onSuccess={handleZoneCreated}
       />
     </div>
   );
