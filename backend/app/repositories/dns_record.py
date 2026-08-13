@@ -1,5 +1,5 @@
-from typing import List, Optional
-from sqlalchemy import select, or_
+from typing import List, Optional, Tuple
+from sqlalchemy import select, or_, func
 from sqlalchemy.orm import Session
 
 from app.models.dns_record import DNSRecord, VALID_RECORD_TYPES
@@ -53,6 +53,29 @@ class DNSRecordRepository:
             term = f"%{search.strip()}%"
             stmt = stmt.where(or_(DNSRecord.name.ilike(term), DNSRecord.value.ilike(term)))
         return list(session.scalars(stmt).all())
+
+    @staticmethod
+    def list_paginated_by_zone(
+        session: Session,
+        hosted_zone_id: str,
+        search: Optional[str] = None,
+        page: int = 1,
+        limit: int = 10,
+    ) -> Tuple[List[DNSRecord], int]:
+        stmt = select(DNSRecord).where(DNSRecord.hosted_zone_id == hosted_zone_id)
+        if search and search.strip():
+            term = f"%{search.strip()}%"
+            stmt = stmt.where(or_(DNSRecord.name.ilike(term), DNSRecord.value.ilike(term)))
+
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        total = session.scalar(count_stmt) or 0
+
+        offset = (page - 1) * limit
+        stmt = stmt.offset(offset).limit(limit)
+        items = list(session.scalars(stmt).all())
+
+        return items, total
+
 
 
     @staticmethod

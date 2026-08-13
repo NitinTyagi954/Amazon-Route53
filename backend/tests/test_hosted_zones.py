@@ -585,8 +585,12 @@ def test_list_hosted_zone_records_with_data(db_session):
     try:
         res = client.get(f"/api/hosted-zones/{zone1.id}/records")
         assert res.status_code == 200
-        records = res.json()
+        res_data = res.json()
+        records = res_data["items"]
         assert len(records) == 2
+        assert res_data["total"] == 2
+        assert res_data["page"] == 1
+        assert res_data["limit"] == 10
         rec_ids = {r["id"] for r in records}
         assert r1.id in rec_ids
         assert r2.id in rec_ids
@@ -596,7 +600,7 @@ def test_list_hosted_zone_records_with_data(db_session):
 
 
 def test_list_hosted_zone_records_empty(db_session):
-    """Test GET /api/hosted-zones/{zone_id}/records returns empty list when zone has no records."""
+    """Test GET /api/hosted-zones/{zone_id}/records returns empty items list when zone has no records."""
     user = UserRepository.create(session=db_session, email="emptyrec@domain.com", hashed_password="hash")
     zone = HostedZoneRepository.create(
         session=db_session,
@@ -613,9 +617,14 @@ def test_list_hosted_zone_records_empty(db_session):
     try:
         res = client.get(f"/api/hosted-zones/{zone.id}/records")
         assert res.status_code == 200
-        assert res.json() == []
+        data = res.json()
+        assert data["items"] == []
+        assert data["total"] == 0
+        assert data["page"] == 1
+        assert data["limit"] == 10
     finally:
         app.dependency_overrides.clear()
+
 
 
 def test_list_hosted_zone_records_not_found(db_session):
@@ -630,6 +639,103 @@ def test_list_hosted_zone_records_not_found(db_session):
         assert "not found" in res.json()["detail"].lower()
     finally:
         app.dependency_overrides.clear()
+
+
+def test_list_hosted_zone_records_pagination_custom(db_session):
+    """Test GET /api/hosted-zones/{zone_id}/records custom page and limit."""
+    user = UserRepository.create(session=db_session, email="recpage@domain.com", hashed_password="hash")
+    zone = HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZRECPAGE001",
+        user_id=user.id,
+        name="pagerec.com.",
+        caller_reference="ref-recpage-001",
+    )
+    
+    for i in range(3):
+        DNSRecordRepository.create(
+            session=db_session,
+            hosted_zone_id=zone.id,
+            name=f"sub{i}.pagerec.com.",
+            type="A",
+            value=f"10.0.0.{i}",
+        )
+
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        res = client.get(f"/api/hosted-zones/{zone.id}/records?page=2&limit=2")
+        assert res.status_code == 200
+        data = res.json()
+        assert len(data["items"]) == 1
+        assert data["total"] == 3
+        assert data["page"] == 2
+        assert data["limit"] == 2
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_list_hosted_zone_records_pagination_search(db_session):
+    """Test GET /api/hosted-zones/{zone_id}/records with search and pagination."""
+    user = UserRepository.create(session=db_session, email="recsearch@domain.com", hashed_password="hash")
+    zone = HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZRECSEARCH001",
+        user_id=user.id,
+        name="searchrec.com.",
+        caller_reference="ref-recsearch-001",
+    )
+    
+    DNSRecordRepository.create(session=db_session, hosted_zone_id=zone.id, name="api.searchrec.com.", type="A", value="1.1.1.1")
+    DNSRecordRepository.create(session=db_session, hosted_zone_id=zone.id, name="web.searchrec.com.", type="A", value="2.2.2.2")
+    DNSRecordRepository.create(session=db_session, hosted_zone_id=zone.id, name="db.other.com.", type="A", value="1.1.1.2")
+
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        res = client.get(f"/api/hosted-zones/{zone.id}/records?search=1.1.1&page=1&limit=1")
+        assert res.status_code == 200
+        data = res.json()
+        assert len(data["items"]) == 1
+        assert data["total"] == 2
+        assert data["page"] == 1
+        assert data["limit"] == 1
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_list_hosted_zone_records_pagination_out_of_range(db_session):
+    """Test GET /api/hosted-zones/{zone_id}/records requesting out-of-range page."""
+    user = UserRepository.create(session=db_session, email="recout@domain.com", hashed_password="hash")
+    zone = HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZRECOUT001",
+        user_id=user.id,
+        name="outrec.com.",
+        caller_reference="ref-recout-001",
+    )
+    
+    DNSRecordRepository.create(session=db_session, hosted_zone_id=zone.id, name="api.outrec.com.", type="A", value="1.1.1.1")
+
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        res = client.get(f"/api/hosted-zones/{zone.id}/records?page=999&limit=10")
+        assert res.status_code == 200
+        data = res.json()
+        assert len(data["items"]) == 0
+        assert data["total"] == 1
+        assert data["page"] == 999
+        assert data["limit"] == 10
+    finally:
+        app.dependency_overrides.clear()
+
 
 
 def test_create_hosted_zone_record_success(db_session):
@@ -808,38 +914,39 @@ def test_list_hosted_zone_records_search(db_session):
         res_name = client.get(f"/api/hosted-zones/{zone1.id}/records?search=api")
         assert res_name.status_code == 200
         data_name = res_name.json()
-        assert len(data_name) == 1
-        assert data_name[0]["name"] == "api.targetzone.com."
-        assert data_name[0]["hosted_zone_id"] == zone1.id
+        assert len(data_name["items"]) == 1
+        assert data_name["items"][0]["name"] == "api.targetzone.com."
+        assert data_name["items"][0]["hosted_zone_id"] == zone1.id
 
         # Value matching
         res_val = client.get(f"/api/hosted-zones/{zone1.id}/records?search=mailserver")
         assert res_val.status_code == 200
         data_val = res_val.json()
-        assert len(data_val) == 1
-        assert data_val[0]["name"] == "web.targetzone.com."
+        assert len(data_val["items"]) == 1
+        assert data_val["items"][0]["name"] == "web.targetzone.com."
 
         # Case-insensitive matching
         res_case = client.get(f"/api/hosted-zones/{zone1.id}/records?search=POSTGRES")
         assert res_case.status_code == 200
         data_case = res_case.json()
-        assert len(data_case) == 1
-        assert data_case[0]["name"] == "db.targetzone.com."
+        assert len(data_case["items"]) == 1
+        assert data_case["items"][0]["name"] == "db.targetzone.com."
 
         # No match results
         res_nomatch = client.get(f"/api/hosted-zones/{zone1.id}/records?search=nonexistent")
         assert res_nomatch.status_code == 200
-        assert res_nomatch.json() == []
+        assert res_nomatch.json()["items"] == []
 
         # Cross-zone isolation: record from zone2 with "10.0.0" search must only return zone1's record
         res_iso = client.get(f"/api/hosted-zones/{zone1.id}/records?search=10.0.0")
         assert res_iso.status_code == 200
         data_iso = res_iso.json()
-        assert len(data_iso) == 1
-        assert data_iso[0]["hosted_zone_id"] == zone1.id
-        assert data_iso[0]["value"] == "10.0.0.10"
+        assert len(data_iso["items"]) == 1
+        assert data_iso["items"][0]["hosted_zone_id"] == zone1.id
+        assert data_iso["items"][0]["value"] == "10.0.0.10"
     finally:
         app.dependency_overrides.clear()
+
 
 
 

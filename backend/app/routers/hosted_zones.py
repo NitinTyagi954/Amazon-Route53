@@ -19,7 +19,7 @@ from app.schemas.hosted_zone import (
     HostedZoneResponse,
     PaginatedHostedZoneResponse,
 )
-from app.schemas.dns_record import DNSRecordCreate, DNSRecordResponse
+from app.schemas.dns_record import DNSRecordCreate, DNSRecordResponse, PaginatedDNSRecordResponse
 
 
 
@@ -175,20 +175,31 @@ def delete_hosted_zone(
     return None
 
 
-@router.get("/{zone_id}/records", response_model=List[DNSRecordResponse])
+@router.get("/{zone_id}/records", response_model=PaginatedDNSRecordResponse)
 def list_hosted_zone_records(
     zone_id: str,
     search: Optional[str] = Query(None, description="Optional case-insensitive search by record name or value"),
+    page: int = Query(1, ge=1, description="Page number (starting at 1)"),
+    limit: int = Query(10, ge=1, le=100, description="Page size limit (1 to 100)"),
     db: Session = Depends(get_db),
-) -> List[DNSRecordResponse]:
-    """List DNS records belonging to a specific Hosted Zone, with optional search query on name or value."""
+) -> PaginatedDNSRecordResponse:
+    """List paginated DNS records belonging to a specific Hosted Zone, with optional search query."""
     zone = HostedZoneRepository.get_by_id(db, zone_id=zone_id)
     if not zone:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Hosted zone '{zone_id}' not found.",
         )
-    return DNSRecordRepository.list_by_zone(db, hosted_zone_id=zone_id, search=search)
+    items, total = DNSRecordRepository.list_paginated_by_zone(
+        db, hosted_zone_id=zone_id, search=search, page=page, limit=limit
+    )
+    return PaginatedDNSRecordResponse(
+        items=items,
+        total=total,
+        page=page,
+        limit=limit,
+    )
+
 
 
 

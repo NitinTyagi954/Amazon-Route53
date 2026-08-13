@@ -56,3 +56,11 @@ class DNSRecordResponse(DNSRecordBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PaginatedDNSRecordResponse(BaseModel):
+    items: list[DNSRecordResponse]
+    total: int = Field(..., description="Total count of matching DNS records")
+    page: int = Field(..., description="Current page number")
+    limit: int = Field(..., description="Page size limit")
+
+
+
