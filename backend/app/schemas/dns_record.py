@@ -28,6 +28,23 @@ class DNSRecordCreate(DNSRecordBase):
     is_system_record: bool = False
 
 
+class DNSRecordUpdate(BaseModel):
+    name: str | None = Field(default=None, json_schema_extra={"example": "api.example.com."})
+    type: str | None = Field(default=None, json_schema_extra={"example": "A"})
+    ttl: int | None = Field(default=None, ge=0)
+    value: str | None = Field(default=None, json_schema_extra={"example": "192.0.2.1"})
+
+    @field_validator("type")
+    @classmethod
+    def validate_type(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        upper_v = v.upper()
+        if upper_v not in VALID_RECORD_TYPES:
+            allowed = ", ".join(sorted(VALID_RECORD_TYPES))
+            raise ValueError(f"Invalid DNS record type '{v}'. Allowed types are: {allowed}")
+        return upper_v
+
 
 class DNSRecordResponse(DNSRecordBase):
     id: int
@@ -37,4 +54,5 @@ class DNSRecordResponse(DNSRecordBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
 

@@ -2,7 +2,7 @@
 
 from app.schemas.auth import UserCreate, UserResponse, TokenResponse
 from app.schemas.hosted_zone import HostedZoneCreate, HostedZoneUpdate, HostedZoneResponse, PaginatedHostedZoneResponse
-from app.schemas.dns_record import DNSRecordCreate, DNSRecordResponse
+from app.schemas.dns_record import DNSRecordCreate, DNSRecordUpdate, DNSRecordResponse
 
 __all__ = [
     "UserCreate",
@@ -13,7 +13,9 @@ __all__ = [
     "HostedZoneResponse",
     "PaginatedHostedZoneResponse",
     "DNSRecordCreate",
+    "DNSRecordUpdate",
     "DNSRecordResponse",
 ]
+
 
 

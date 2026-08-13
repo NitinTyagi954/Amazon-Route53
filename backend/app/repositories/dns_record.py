@@ -54,6 +54,42 @@ class DNSRecordRepository:
         return list(session.scalars(stmt).all())
 
     @staticmethod
+    def update(
+        session: Session,
+        record_id: int,
+        name: Optional[str] = None,
+        type: Optional[str] = None,
+        ttl: Optional[int] = None,
+        value: Optional[str] = None,
+        allow_system_update: bool = False,
+    ) -> Optional[DNSRecord]:
+        record = session.get(DNSRecord, record_id)
+        if not record:
+            return None
+
+        if record.is_system_record and not allow_system_update:
+            raise ValueError("Cannot modify system-generated SOA or NS records.")
+
+        if type is not None:
+            upper_type = type.upper()
+            if upper_type not in VALID_RECORD_TYPES:
+                allowed = ", ".join(sorted(VALID_RECORD_TYPES))
+                raise ValueError(f"Invalid DNS record type '{type}'. Allowed types are: {allowed}")
+            record.type = upper_type
+
+        if name is not None:
+            record.name = name if name.endswith(".") else f"{name}."
+        if ttl is not None:
+            if ttl < 0:
+                raise ValueError("TTL must be greater than or equal to 0.")
+            record.ttl = ttl
+        if value is not None:
+            record.value = value
+
+        session.flush()
+        return record
+
+    @staticmethod
     def delete(session: Session, record_id: int, allow_system_delete: bool = False) -> bool:
         record = session.get(DNSRecord, record_id)
         if record:
@@ -67,3 +103,4 @@ class DNSRecordRepository:
             session.flush()
             return True
         return False
+
