@@ -1,0 +1,31 @@
+# Python cache & compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Pytest & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment files & Virtualenvs
+.env
+.venv
+venv/
+ENV/
+env/
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local Database & SQLite files
+*.db
+*.sqlite3
+route53.db
+scalar_ai.db
+
+# Agent logs / temporary brain files
+.agents/
