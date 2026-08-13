@@ -166,10 +166,11 @@ def list_hosted_zone_records(
     page: int = Query(1, ge=1, description="Page number (starting at 1)"),
     limit: int = Query(10, ge=1, le=100, description="Page size limit (1 to 100)"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> PaginatedDNSRecordResponse:
     """List paginated DNS records belonging to a specific Hosted Zone, with optional search query."""
     zone = HostedZoneRepository.get_by_id(db, zone_id=zone_id)
-    if not zone:
+    if not zone or zone.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Hosted zone '{zone_id}' not found.",
@@ -192,10 +193,11 @@ def create_hosted_zone_record(
     zone_id: str,
     record_in: DNSRecordCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> DNSRecordResponse:
     """Create a new DNS record inside an existing Hosted Zone."""
     zone = HostedZoneRepository.get_by_id(db, zone_id=zone_id)
-    if not zone:
+    if not zone or zone.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Hosted zone '{zone_id}' not found.",

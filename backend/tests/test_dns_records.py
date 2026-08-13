@@ -1,16 +1,82 @@
 """Unit tests for DNS Records API endpoints."""
 
+from datetime import datetime, timezone, timedelta
 from fastapi.testclient import TestClient
 from app.main import app
 from app.dependencies import get_db
 from app.repositories import UserRepository, HostedZoneRepository, DNSRecordRepository
+from app.core.security import hash_password
+from app.models.session import Session as SessionModel
 
 client = TestClient(app)
 
 
+def _create_user_and_token(db):
+    """Seed a test user and active session, returning (user, headers)."""
+    import random
+    email = f"test-{random.randint(1000, 9999)}@domain.com"
+    user = UserRepository.create(session=db, email=email, hashed_password=hash_password("password"))
+    token = f"tok-{id(db)}-{random.randint(1000, 9999)}"
+    exp = datetime.now(timezone.utc) + timedelta(hours=24)
+    sess = SessionModel(user_id=user.id, token=token, expires_at=exp)
+    db.add(sess)
+    db.flush()
+    return user, {"Authorization": f"Bearer {token}"}
+
+
+def test_dns_records_unauthorized():
+    """Verify that individual DNS record endpoints return 401 when unauthenticated."""
+    res1 = client.get("/api/records/123")
+    assert res1.status_code == 401
+
+    res2 = client.put("/api/records/123", json={"value": "1.1.1.1"})
+    assert res2.status_code == 401
+
+    res3 = client.delete("/api/records/123")
+    assert res3.status_code == 401
+
+
+def test_dns_records_ownership_isolation(db_session):
+    """Verify that a user cannot access or modify another user's DNS records (returns 404)."""
+    user_a, headers_a = _create_user_and_token(db_session)
+    user_b, headers_b = _create_user_and_token(db_session)
+
+    zone_b = HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZOWNERISOB",
+        user_id=user_b.id,
+        name="userb.com.",
+        caller_reference="ref-user-b",
+    )
+    record_b = DNSRecordRepository.create(
+        session=db_session,
+        hosted_zone_id=zone_b.id,
+        name="api.userb.com.",
+        type="A",
+        value="1.1.1.1",
+        ttl=300,
+    )
+
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        res_get = client.get(f"/api/records/{record_b.id}", headers=headers_a)
+        assert res_get.status_code == 404
+
+        res_put = client.put(f"/api/records/{record_b.id}", json={"value": "2.2.2.2"}, headers=headers_a)
+        assert res_put.status_code == 404
+
+        res_del = client.delete(f"/api/records/{record_b.id}", headers=headers_a)
+        assert res_del.status_code == 404
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_get_dns_record_success(db_session):
     """Test GET /api/records/{record_id} returns existing DNS record."""
-    user = UserRepository.create(session=db_session, email="dnsget@domain.com", hashed_password="hash")
+    user, headers = _create_user_and_token(db_session)
     zone = HostedZoneRepository.create(
         session=db_session,
         zone_id="ZDNSGET001",
@@ -32,7 +98,7 @@ def test_get_dns_record_success(db_session):
 
     app.dependency_overrides[get_db] = _get_db_override
     try:
-        response = client.get(f"/api/records/{record.id}")
+        response = client.get(f"/api/records/{record.id}", headers=headers)
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == record.id
@@ -50,12 +116,14 @@ def test_get_dns_record_success(db_session):
 
 def test_get_dns_record_not_found(db_session):
     """Test GET /api/records/{record_id} returns 404 for non-existent record ID."""
+    user, headers = _create_user_and_token(db_session)
+
     def _get_db_override():
         yield db_session
 
     app.dependency_overrides[get_db] = _get_db_override
     try:
-        response = client.get("/api/records/999999")
+        response = client.get("/api/records/999999", headers=headers)
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
     finally:
@@ -64,7 +132,7 @@ def test_get_dns_record_not_found(db_session):
 
 def test_update_dns_record_success(db_session):
     """Test PUT /api/records/{record_id} updates record fields and preserves metadata."""
-    user = UserRepository.create(session=db_session, email="dnsupd@domain.com", hashed_password="hash")
+    user, headers = _create_user_and_token(db_session)
     zone = HostedZoneRepository.create(
         session=db_session,
         zone_id="ZDNSUPD001",
@@ -92,7 +160,7 @@ def test_update_dns_record_success(db_session):
             "ttl": 600,
             "value": "2001:db8::1",
         }
-        response = client.put(f"/api/records/{record.id}", json=payload)
+        response = client.put(f"/api/records/{record.id}", json=payload, headers=headers)
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == record.id
@@ -108,12 +176,14 @@ def test_update_dns_record_success(db_session):
 
 def test_update_dns_record_not_found(db_session):
     """Test PUT /api/records/{record_id} returns 404 for non-existent record."""
+    user, headers = _create_user_and_token(db_session)
+
     def _get_db_override():
         yield db_session
 
     app.dependency_overrides[get_db] = _get_db_override
     try:
-        response = client.put("/api/records/999999", json={"value": "1.1.1.1"})
+        response = client.put("/api/records/999999", json={"value": "1.1.1.1"}, headers=headers)
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
     finally:
@@ -122,7 +192,7 @@ def test_update_dns_record_not_found(db_session):
 
 def test_update_dns_record_invalid_type_or_ttl(db_session):
     """Test PUT /api/records/{record_id} returns 422 for invalid type or negative TTL."""
-    user = UserRepository.create(session=db_session, email="invupd@domain.com", hashed_password="hash")
+    user, headers = _create_user_and_token(db_session)
     zone = HostedZoneRepository.create(
         session=db_session,
         zone_id="ZINVUPD001",
@@ -145,11 +215,11 @@ def test_update_dns_record_invalid_type_or_ttl(db_session):
     app.dependency_overrides[get_db] = _get_db_override
     try:
         # Invalid type
-        res_type = client.put(f"/api/records/{record.id}", json={"type": "BAD_TYPE"})
+        res_type = client.put(f"/api/records/{record.id}", json={"type": "BAD_TYPE"}, headers=headers)
         assert res_type.status_code == 422
 
         # Invalid negative TTL
-        res_ttl = client.put(f"/api/records/{record.id}", json={"ttl": -50})
+        res_ttl = client.put(f"/api/records/{record.id}", json={"ttl": -50}, headers=headers)
         assert res_ttl.status_code == 422
     finally:
         app.dependency_overrides.clear()
@@ -157,7 +227,7 @@ def test_update_dns_record_invalid_type_or_ttl(db_session):
 
 def test_update_dns_record_system_record_protection(db_session):
     """Test PUT /api/records/{record_id} returns 400 when attempting to update a system record."""
-    user = UserRepository.create(session=db_session, email="sysrec@domain.com", hashed_password="hash")
+    user, headers = _create_user_and_token(db_session)
     zone = HostedZoneRepository.create(
         session=db_session,
         zone_id="ZSYSREC001",
@@ -179,7 +249,7 @@ def test_update_dns_record_system_record_protection(db_session):
 
     app.dependency_overrides[get_db] = _get_db_override
     try:
-        response = client.put(f"/api/records/{system_record.id}", json={"value": "ns2.newdns.com."})
+        response = client.put(f"/api/records/{system_record.id}", json={"value": "ns2.newdns.com."}, headers=headers)
         assert response.status_code == 400
         assert "cannot modify system-generated" in response.json()["detail"].lower()
     finally:
@@ -188,7 +258,7 @@ def test_update_dns_record_system_record_protection(db_session):
 
 def test_delete_dns_record_success(db_session):
     """Test DELETE /api/records/{record_id} deletes a record and decrements parent zone record_count."""
-    user = UserRepository.create(session=db_session, email="dnsdel@domain.com", hashed_password="hash")
+    user, headers = _create_user_and_token(db_session)
     zone = HostedZoneRepository.create(
         session=db_session,
         zone_id="ZDNSDEL001",
@@ -211,7 +281,7 @@ def test_delete_dns_record_success(db_session):
 
     app.dependency_overrides[get_db] = _get_db_override
     try:
-        response = client.delete(f"/api/records/{record.id}")
+        response = client.delete(f"/api/records/{record.id}", headers=headers)
         assert response.status_code == 204
         assert response.content == b""
 
@@ -227,12 +297,14 @@ def test_delete_dns_record_success(db_session):
 
 def test_delete_dns_record_not_found(db_session):
     """Test DELETE /api/records/{record_id} returns 404 for non-existent record."""
+    user, headers = _create_user_and_token(db_session)
+
     def _get_db_override():
         yield db_session
 
     app.dependency_overrides[get_db] = _get_db_override
     try:
-        response = client.delete("/api/records/999999")
+        response = client.delete("/api/records/999999", headers=headers)
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
     finally:
@@ -241,7 +313,7 @@ def test_delete_dns_record_not_found(db_session):
 
 def test_delete_dns_record_system_record_protection(db_session):
     """Test DELETE /api/records/{record_id} returns 400 when attempting to delete a system record."""
-    user = UserRepository.create(session=db_session, email="delsysrec@domain.com", hashed_password="hash")
+    user, headers = _create_user_and_token(db_session)
     zone = HostedZoneRepository.create(
         session=db_session,
         zone_id="ZDELSYSREC01",
@@ -263,7 +335,7 @@ def test_delete_dns_record_system_record_protection(db_session):
 
     app.dependency_overrides[get_db] = _get_db_override
     try:
-        response = client.delete(f"/api/records/{system_record.id}")
+        response = client.delete(f"/api/records/{system_record.id}", headers=headers)
         assert response.status_code == 400
         assert "cannot delete system-generated" in response.json()["detail"].lower()
 

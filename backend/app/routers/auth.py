@@ -3,10 +3,10 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session as DBSession
 
-from app.dependencies import get_db
+from app.dependencies import get_db, get_current_session
 from app.models.session import Session as SessionModel
 from app.schemas.auth import LoginRequest, LoginResponse
 from app.services.auth import authenticate_user
@@ -42,3 +42,14 @@ def login(
     db.commit()
 
     return LoginResponse(token=token, expires_at=expires_at)
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(
+    session_row: SessionModel = Depends(get_current_session),
+    db: DBSession = Depends(get_db),
+) -> Response:
+    """Invalidate the current session."""
+    db.delete(session_row)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

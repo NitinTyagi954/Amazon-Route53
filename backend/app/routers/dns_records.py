@@ -3,7 +3,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.dependencies import get_db
+from app.dependencies import get_db, get_current_user
+from app.models.user import User
 from app.repositories.dns_record import DNSRecordRepository
 from app.schemas.dns_record import DNSRecordUpdate, DNSRecordResponse
 
@@ -14,10 +15,11 @@ router = APIRouter(prefix="/api/records", tags=["DNS Records"])
 def get_dns_record(
     record_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> DNSRecordResponse:
     """Retrieve a single DNS record by ID."""
     record = DNSRecordRepository.get_by_id(db, record_id=record_id)
-    if not record:
+    if not record or record.hosted_zone.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"DNS record with ID '{record_id}' not found.",
@@ -30,10 +32,11 @@ def update_dns_record(
     record_id: int,
     record_in: DNSRecordUpdate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> DNSRecordResponse:
     """Update editable fields of an existing DNS record by ID."""
     record = DNSRecordRepository.get_by_id(db, record_id=record_id)
-    if not record:
+    if not record or record.hosted_zone.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"DNS record with ID '{record_id}' not found.",
@@ -69,10 +72,11 @@ def update_dns_record(
 def delete_dns_record(
     record_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> None:
     """Delete a DNS record by ID."""
     record = DNSRecordRepository.get_by_id(db, record_id=record_id)
-    if not record:
+    if not record or record.hosted_zone.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"DNS record with ID '{record_id}' not found.",

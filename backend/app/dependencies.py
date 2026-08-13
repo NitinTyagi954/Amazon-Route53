@@ -20,18 +20,11 @@ from app.models.user import User
 _bearer_scheme = HTTPBearer(auto_error=False)
 
 
-def get_current_user(
+def get_current_session(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
     db: Session = Depends(get_db),
-) -> User:
-    """Resolve and return the authenticated User from a Bearer session token.
-
-    Raises HTTP 401 when:
-    - the Authorization header is missing or malformed,
-    - the token does not match any session row,
-    - the session has expired, or
-    - the associated user account is inactive.
-    """
+) -> SessionModel:
+    """Resolve and return the valid Session from a Bearer session token."""
     if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -54,6 +47,16 @@ def get_current_user(
             detail="Session has expired.",
         )
 
+    return session_row
+
+
+def get_current_user(
+    session_row: SessionModel = Depends(get_current_session),
+) -> User:
+    """Resolve and return the authenticated User from a valid session.
+
+    Raises HTTP 401 when the associated user account is inactive.
+    """
     user = session_row.user
     if not user.is_active:
         raise HTTPException(
@@ -64,4 +67,4 @@ def get_current_user(
     return user
 
 
-__all__ = ["get_db", "get_current_user"]
+__all__ = ["get_db", "get_current_user", "get_current_session"]
