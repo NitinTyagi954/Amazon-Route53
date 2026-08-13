@@ -23,3 +23,15 @@ class UserResponse(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class LoginRequest(BaseModel):
+    """Request body for POST /api/auth/login."""
+    email: EmailStr
+    password: str = Field(..., min_length=1)
+
+
+class LoginResponse(BaseModel):
+    """Response body returned on successful login."""
+    token: str
+    expires_at: datetime
