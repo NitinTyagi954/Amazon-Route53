@@ -185,3 +185,91 @@ def test_update_dns_record_system_record_protection(db_session):
     finally:
         app.dependency_overrides.clear()
 
+
+def test_delete_dns_record_success(db_session):
+    """Test DELETE /api/records/{record_id} deletes a record and decrements parent zone record_count."""
+    user = UserRepository.create(session=db_session, email="dnsdel@domain.com", hashed_password="hash")
+    zone = HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZDNSDEL001",
+        user_id=user.id,
+        name="dnsdeldomain.com.",
+        caller_reference="ref-dnsdel-001",
+    )
+    record = DNSRecordRepository.create(
+        session=db_session,
+        hosted_zone_id=zone.id,
+        name="sub.dnsdeldomain.com.",
+        type="A",
+        value="1.2.3.4",
+        ttl=300,
+    )
+    assert zone.record_count == 1
+
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        response = client.delete(f"/api/records/{record.id}")
+        assert response.status_code == 204
+        assert response.content == b""
+
+        # Verify record is deleted
+        assert DNSRecordRepository.get_by_id(db_session, record.id) is None
+
+        # Verify parent zone record_count decremented to 0
+        updated_zone = HostedZoneRepository.get_by_id(db_session, zone.id)
+        assert updated_zone.record_count == 0
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_delete_dns_record_not_found(db_session):
+    """Test DELETE /api/records/{record_id} returns 404 for non-existent record."""
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        response = client.delete("/api/records/999999")
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_delete_dns_record_system_record_protection(db_session):
+    """Test DELETE /api/records/{record_id} returns 400 when attempting to delete a system record."""
+    user = UserRepository.create(session=db_session, email="delsysrec@domain.com", hashed_password="hash")
+    zone = HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZDELSYSREC01",
+        user_id=user.id,
+        name="delsysdomain.com.",
+        caller_reference="ref-delsys-001",
+    )
+    system_record = DNSRecordRepository.create(
+        session=db_session,
+        hosted_zone_id=zone.id,
+        name="delsysdomain.com.",
+        type="SOA",
+        value="ns1.dns.com. hostmaster.dns.com. 1 7200 900 1209600 86400",
+        is_system_record=True,
+    )
+
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        response = client.delete(f"/api/records/{system_record.id}")
+        assert response.status_code == 400
+        assert "cannot delete system-generated" in response.json()["detail"].lower()
+
+        # Verify record still exists
+        assert DNSRecordRepository.get_by_id(db_session, system_record.id) is not None
+    finally:
+        app.dependency_overrides.clear()
+
+
