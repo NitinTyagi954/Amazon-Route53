@@ -286,6 +286,124 @@ export async function updateHostedZone(
   return response.json();
 }
 
+// ─── DNS Record types ──────────────────────────────────────────────────────
+
+export interface DNSRecordItem {
+  id: number;
+  hosted_zone_id: string;
+  name: string;
+  type: string;
+  ttl: number;
+  value: string;
+  is_system_record: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaginatedDNSRecordsResponse {
+  items: DNSRecordItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+// ─── Helper ────────────────────────────────────────────────────────────────
+
+async function parseApiError(response: Response): Promise<string> {
+  try {
+    const errorJson = await response.json();
+    if (typeof errorJson.detail === "string") return errorJson.detail;
+    if (Array.isArray(errorJson.detail))
+      return errorJson.detail.map((e: any) => e.msg || e.message).join(", ");
+    return JSON.stringify(errorJson);
+  } catch {
+    return response.statusText;
+  }
+}
+
+// ─── getHostedZone ─────────────────────────────────────────────────────────
+
+/**
+ * Fetches a single Hosted Zone by ID (GET /api/hosted-zones/{zoneId}).
+ */
+export async function getHostedZone(zoneId: string): Promise<HostedZoneItem> {
+  const token = getStoredAuthToken();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/hosted-zones/${zoneId}`, {
+      method: "GET",
+      headers,
+    });
+  } catch (err: any) {
+    throw new ApiError(
+      "Unable to connect to the server. Please check that the backend is running.",
+      0,
+      err?.message
+    );
+  }
+
+  if (!response.ok) {
+    const detail = await parseApiError(response);
+    if (response.status === 401)
+      throw new ApiError(detail || "Authentication failed.", 401, detail);
+    if (response.status === 404)
+      throw new ApiError(detail || "Hosted zone not found.", 404, detail);
+    throw new ApiError(detail || `Server error (${response.status})`, response.status, detail);
+  }
+
+  return response.json();
+}
+
+// ─── getHostedZoneRecords ──────────────────────────────────────────────────
+
+/**
+ * Fetches paginated DNS records for a Hosted Zone
+ * (GET /api/hosted-zones/{zoneId}/records).
+ */
+export async function getHostedZoneRecords(
+  zoneId: string,
+  page = 1,
+  limit = 10,
+  search?: string
+): Promise<PaginatedDNSRecordsResponse> {
+  const token = getStoredAuthToken();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const queryParams = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (search && search.trim()) queryParams.set("search", search.trim());
+
+  let response: Response;
+  try {
+    response = await fetch(
+      `${API_BASE_URL}/api/hosted-zones/${zoneId}/records?${queryParams.toString()}`,
+      { method: "GET", headers }
+    );
+  } catch (err: any) {
+    throw new ApiError(
+      "Unable to connect to the server. Please check that the backend is running.",
+      0,
+      err?.message
+    );
+  }
+
+  if (!response.ok) {
+    const detail = await parseApiError(response);
+    if (response.status === 401)
+      throw new ApiError(detail || "Authentication failed.", 401, detail);
+    if (response.status === 404)
+      throw new ApiError(detail || "Hosted zone not found.", 404, detail);
+    throw new ApiError(detail || `Server error (${response.status})`, response.status, detail);
+  }
+
+  return response.json();
+}
+
+// ─── deleteHostedZone ──────────────────────────────────────────────────────
+
 /**
  * Deletes a Hosted Zone on the FastAPI backend (DELETE /api/hosted-zones/{id}).
  * Returns void on HTTP 204 success.

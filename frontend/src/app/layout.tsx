@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { AppShell } from "@/components/layout/AppShell";
 
 export const metadata: Metadata = {
   title: "Route 53 - AWS Management Console",
@@ -14,9 +13,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="h-full">
-      <body className="h-full bg-[#f2f3f3] text-[#16191f] antialiased overflow-hidden">
-        <AppShell>{children}</AppShell>
-      </body>
+      <body className="h-full antialiased">{children}</body>
     </html>
   );
 }

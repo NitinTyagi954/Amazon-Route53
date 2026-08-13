@@ -1,6 +1,7 @@
 """AWS Route 53 Clone - FastAPI Application Entry Point."""
 
 from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -14,9 +15,21 @@ app = FastAPI(
     description="AWS Route 53 Clone API Foundation",
 )
 
+# ---------------------------------------------------------------------------
+# CORS – allow the Next.js dev server to communicate with this backend
+# ---------------------------------------------------------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
+)
+
 app.include_router(hosted_zones_router)
 app.include_router(dns_records_router)
 app.include_router(auth_router)
+
 
 
 

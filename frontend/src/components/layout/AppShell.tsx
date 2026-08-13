@@ -17,7 +17,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f2f3f3]">
+    <div className="h-screen flex flex-col bg-[#f2f3f3]">
       {/* 1. AWS Top Navigation Bar */}
       <TopHeader />
 

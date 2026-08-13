@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   RotateCw,
   Search,
@@ -27,6 +28,7 @@ import {
 } from "@/lib/api/hostedZones";
 
 export default function HostedZonesPage() {
+  const router = useRouter();
   const [hostedZones, setHostedZones] = useState<HostedZoneItem[]>([]);
   const [totalItems, setTotalItems] = useState<number>(0);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -233,6 +235,9 @@ export default function HostedZonesPage() {
             variant="secondary"
             size="md"
             disabled={!isSingleSelection}
+            onClick={() => {
+              if (selectedIds[0]) router.push(`/hosted-zones/${selectedIds[0]}`);
+            }}
             icon={<Eye className="w-3.5 h-3.5" />}
           >
             View details
@@ -367,7 +372,7 @@ export default function HostedZonesPage() {
                       </td>
                       <td className="py-2.5 px-4 font-medium text-[#0972d3] hover:underline">
                         <Link
-                          href={`/hosted-zones`}
+                          href={`/hosted-zones/${zone.id}`}
                           onClick={(e) => e.stopPropagation()}
                         >
                           {zone.name}
