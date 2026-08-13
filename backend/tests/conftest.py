@@ -3,6 +3,7 @@
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.models import Base
 
@@ -10,7 +11,12 @@ from app.models import Base
 @pytest.fixture
 def db_session():
     """Create an isolated in-memory SQLite database session for unit testing."""
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, echo=False)
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        echo=False,
+    )
     Base.metadata.create_all(engine)
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     session = TestingSessionLocal()
@@ -19,3 +25,4 @@ def db_session():
         session.commit()
     finally:
         session.close()
+

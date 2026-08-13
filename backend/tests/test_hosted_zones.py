@@ -87,3 +87,88 @@ def test_list_hosted_zones_with_data(db_session):
         assert len(all_response.json()) >= 2
     finally:
         app.dependency_overrides.clear()
+
+
+def test_create_hosted_zone_success(db_session):
+    """Test POST /api/hosted-zones creates a hosted zone and returns HTTP 201."""
+    user = UserRepository.create(session=db_session, email="creator@domain.com", hashed_password="hash")
+
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        payload = {
+            "name": "newzone.com",
+            "comment": "New production zone",
+            "is_private": False,
+            "user_id": user.id,
+            "caller_reference": "ref-custom-001",
+        }
+        response = client.post("/api/hosted-zones", json=payload)
+        assert response.status_code == 201
+        data = response.json()
+        assert data["id"].startswith("Z")
+        assert len(data["id"]) > 5
+        assert data["name"] == "newzone.com."
+        assert data["user_id"] == user.id
+        assert data["caller_reference"] == "ref-custom-001"
+        assert data["comment"] == "New production zone"
+        assert data["is_private"] is False
+        assert data["record_count"] == 0
+        assert "created_at" in data
+        assert "updated_at" in data
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_create_hosted_zone_invalid_domain(db_session):
+    """Test POST /api/hosted-zones returns 422 on invalid domain names."""
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        invalid_domains = ["", "   ", "-startdash.com", "bad domain!", "test..com"]
+        for domain in invalid_domains:
+            response = client.post("/api/hosted-zones", json={"name": domain})
+            assert response.status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_create_hosted_zone_missing_fields(db_session):
+    """Test POST /api/hosted-zones returns 422 when required fields are missing."""
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        response = client.post("/api/hosted-zones", json={})
+        assert response.status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_create_hosted_zone_duplicate_caller_reference(db_session):
+    """Test POST /api/hosted-zones returns 409 when duplicate caller reference is provided."""
+    user = UserRepository.create(session=db_session, email="dupe@domain.com", hashed_password="hash")
+
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        payload = {
+            "name": "zoneone.com",
+            "user_id": user.id,
+            "caller_reference": "same-caller-ref",
+        }
+        res1 = client.post("/api/hosted-zones", json=payload)
+        assert res1.status_code == 201
+
+        res2 = client.post("/api/hosted-zones", json={**payload, "name": "zonetwo.com"})
+        assert res2.status_code == 409
+    finally:
+        app.dependency_overrides.clear()
+
