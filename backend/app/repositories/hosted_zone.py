@@ -47,6 +47,26 @@ class HostedZoneRepository:
         return list(session.scalars(stmt).all())
 
     @staticmethod
+    def update(
+        session: Session,
+        zone_id: str,
+        name: Optional[str] = None,
+        comment: Optional[str] = None,
+        is_private: Optional[bool] = None,
+    ) -> Optional[HostedZone]:
+        zone = session.get(HostedZone, zone_id)
+        if not zone:
+            return None
+        if name is not None:
+            zone.name = name if name.endswith(".") else f"{name}."
+        if comment is not None:
+            zone.comment = comment
+        if is_private is not None:
+            zone.is_private = is_private
+        session.flush()
+        return zone
+
+    @staticmethod
     def delete(session: Session, zone_id: str) -> bool:
         zone = session.get(HostedZone, zone_id)
         if zone:
@@ -54,3 +74,4 @@ class HostedZoneRepository:
             session.flush()
             return True
         return False
+

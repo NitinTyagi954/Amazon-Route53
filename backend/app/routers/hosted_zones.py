@@ -12,9 +12,10 @@ from app.dependencies import get_db
 from app.models.user import User
 from app.repositories.hosted_zone import HostedZoneRepository
 from app.repositories.user import UserRepository
-from app.schemas.hosted_zone import HostedZoneCreate, HostedZoneResponse
+from app.schemas.hosted_zone import HostedZoneCreate, HostedZoneUpdate, HostedZoneResponse
 
 router = APIRouter(prefix="/api/hosted-zones", tags=["Hosted Zones"])
+
 
 
 def generate_zone_id() -> str:
@@ -113,5 +114,32 @@ def get_hosted_zone(
             detail=f"Hosted zone '{zone_id}' not found.",
         )
     return zone
+
+
+@router.put("/{zone_id}", response_model=HostedZoneResponse)
+def update_hosted_zone(
+    zone_id: str,
+    zone_in: HostedZoneUpdate,
+    db: Session = Depends(get_db),
+) -> HostedZoneResponse:
+    """Update editable fields of a Hosted Zone by ID."""
+    zone = HostedZoneRepository.get_by_id(db, zone_id=zone_id)
+    if not zone:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Hosted zone '{zone_id}' not found.",
+        )
+
+    updated_zone = HostedZoneRepository.update(
+        session=db,
+        zone_id=zone_id,
+        name=zone_in.name,
+        comment=zone_in.comment,
+        is_private=zone_in.is_private,
+    )
+    db.commit()
+    db.refresh(updated_zone)
+    return updated_zone
+
 
 

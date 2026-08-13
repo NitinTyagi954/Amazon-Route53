@@ -219,3 +219,78 @@ def test_get_hosted_zone_not_found(db_session):
         app.dependency_overrides.clear()
 
 
+def test_update_hosted_zone_success(db_session):
+    """Test PUT /api/hosted-zones/{zone_id} updates editable fields and returns HTTP 200."""
+    user = UserRepository.create(session=db_session, email="updater@domain.com", hashed_password="hash")
+    zone = HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZUPDATEZONE001",
+        user_id=user.id,
+        name="original.com.",
+        caller_reference="ref-upd-001",
+        comment="Original comment",
+        is_private=False,
+    )
+
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        payload = {
+            "name": "updateddomain.com",
+            "comment": "Updated comment text",
+            "is_private": True,
+        }
+        response = client.put(f"/api/hosted-zones/{zone.id}", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == "ZUPDATEZONE001"
+        assert data["name"] == "updateddomain.com."
+        assert data["comment"] == "Updated comment text"
+        assert data["is_private"] is True
+        # Verify immutable fields remain unchanged
+        assert data["user_id"] == user.id
+        assert data["caller_reference"] == "ref-upd-001"
+        assert data["record_count"] == 0
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_update_hosted_zone_not_found(db_session):
+    """Test PUT /api/hosted-zones/{zone_id} returns 404 when updating non-existent zone."""
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        response = client.put("/api/hosted-zones/ZNONEXISTENTZONE", json={"comment": "No zone here"})
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_update_hosted_zone_invalid_domain(db_session):
+    """Test PUT /api/hosted-zones/{zone_id} returns 422 on invalid domain update."""
+    user = UserRepository.create(session=db_session, email="invalidupd@domain.com", hashed_password="hash")
+    zone = HostedZoneRepository.create(
+        session=db_session,
+        zone_id="ZUPDVAL001",
+        user_id=user.id,
+        name="validbefore.com.",
+        caller_reference="ref-updval-001",
+    )
+
+    def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    try:
+        response = client.put(f"/api/hosted-zones/{zone.id}", json={"name": "-invalidstart.com"})
+        assert response.status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+
+
+
