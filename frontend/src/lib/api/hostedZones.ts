@@ -285,3 +285,70 @@ export async function updateHostedZone(
 
   return response.json();
 }
+
+/**
+ * Deletes a Hosted Zone on the FastAPI backend (DELETE /api/hosted-zones/{id}).
+ * Returns void on HTTP 204 success.
+ */
+export async function deleteHostedZone(id: string): Promise<void> {
+  const token = getStoredAuthToken();
+  const headers: Record<string, string> = {};
+
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/hosted-zones/${id}`, {
+      method: "DELETE",
+      headers,
+    });
+  } catch (err: any) {
+    throw new ApiError(
+      "Unable to connect to the server. Please check that the backend is running.",
+      0,
+      err?.message
+    );
+  }
+
+  if (response.status === 204) {
+    return; // success — no body
+  }
+
+  let errorDetail = "";
+  try {
+    const errorJson = await response.json();
+    if (typeof errorJson.detail === "string") {
+      errorDetail = errorJson.detail;
+    } else if (Array.isArray(errorJson.detail)) {
+      errorDetail = errorJson.detail.map((e: any) => e.msg || e.message).join(", ");
+    } else {
+      errorDetail = JSON.stringify(errorJson);
+    }
+  } catch {
+    errorDetail = response.statusText;
+  }
+
+  if (response.status === 401) {
+    throw new ApiError(
+      errorDetail || "Authentication failed: Missing or invalid session token.",
+      401,
+      errorDetail
+    );
+  }
+
+  if (response.status === 404) {
+    throw new ApiError(
+      errorDetail || "Hosted zone not found. It may have already been deleted.",
+      404,
+      errorDetail
+    );
+  }
+
+  throw new ApiError(
+    errorDetail || `Server returned error (${response.status})`,
+    response.status,
+    errorDetail
+  );
+}

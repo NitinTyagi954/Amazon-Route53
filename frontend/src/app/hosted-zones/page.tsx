@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { CreateHostedZoneModal } from "@/components/hosted-zones/CreateHostedZoneModal";
 import { EditHostedZoneModal } from "@/components/hosted-zones/EditHostedZoneModal";
+import { DeleteHostedZoneModal } from "@/components/hosted-zones/DeleteHostedZoneModal";
 import {
   HostedZoneItem,
   getHostedZones,
@@ -37,6 +38,8 @@ export default function HostedZonesPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingZone, setEditingZone] = useState<HostedZoneItem | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deletingZone, setDeletingZone] = useState<HostedZoneItem | null>(null);
   const [notification, setNotification] = useState<{
     type: "success" | "error" | "info" | "warning";
     title?: string;
@@ -174,6 +177,26 @@ export default function HostedZonesPage() {
     await fetchZones(currentPage, searchTerm);
   };
 
+  const handleDeleteClick = () => {
+    if (!selectedZone) return;
+    setDeletingZone(selectedZone);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleZoneDeleted = async (deletedId: string, deletedName: string) => {
+    setIsDeleteModalOpen(false);
+    setDeletingZone(null);
+    setSelectedIds([]);
+    setNotification({
+      type: "success",
+      title: "Successfully deleted hosted zone",
+      message: `Hosted zone "${deletedName}" has been permanently deleted.`,
+    });
+    // If we were on a page that only had this one item, step back
+    const newPage = hostedZones.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage;
+    await fetchZones(newPage, searchTerm);
+  };
+
   return (
     <div className="space-y-4">
       {/* Success / Error Notification */}
@@ -228,7 +251,8 @@ export default function HostedZonesPage() {
           <Button
             variant="secondary"
             size="md"
-            disabled={!hasSelection}
+            disabled={!isSingleSelection}
+            onClick={handleDeleteClick}
             icon={<Trash2 className="w-3.5 h-3.5" />}
           >
             Delete
@@ -449,6 +473,17 @@ export default function HostedZonesPage() {
           setEditingZone(null);
         }}
         onSuccess={handleZoneUpdated}
+      />
+
+      {/* 6. Delete Hosted Zone Modal */}
+      <DeleteHostedZoneModal
+        isOpen={isDeleteModalOpen}
+        zone={deletingZone}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setDeletingZone(null);
+        }}
+        onSuccess={handleZoneDeleted}
       />
     </div>
   );
