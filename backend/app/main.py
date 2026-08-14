@@ -12,9 +12,12 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.dependencies import get_db
 from app.routers import hosted_zones_router, dns_records_router, auth_router
-from app.database.connection import get_db_session
+from app.database.connection import get_db_session, get_engine
+from app.database.base import Base
 from app.repositories.user import UserRepository
 from app.core.security import hash_password
+# Ensure all model classes are registered on Base.metadata
+import app.models  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +31,11 @@ DEMO_FULL_NAME = "Demo User"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Seed the demo user on startup so the 'Try Demo Account' button works."""
+    """Create tables (if missing) and seed the demo user on startup."""
+    # Ensure all tables exist – safe no-op when they already do.
+    engine = get_engine()
+    Base.metadata.create_all(engine)
+
     with get_db_session() as db:
         existing = UserRepository.get_by_email(db, DEMO_EMAIL)
         if existing is None:
