@@ -52,11 +52,12 @@ app = FastAPI(
 )
 
 # ---------------------------------------------------------------------------
-# CORS – allow the Next.js dev server to communicate with this backend
+# CORS – allow the Next.js dev server and all Vercel deployments
 # ---------------------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://amazon-route53.vercel.app"],
+    allow_origins=["http://localhost:3000"],
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["Authorization", "Content-Type", "Accept"],
